@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paper Trader</title>
+  <meta name="description" content="Practice buying and selling crypto with fake money at live prices, inside your own rules.">
+  <meta name="theme-color" content="#0B0F0D">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B0F0D'/%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%233DF28A'/%3E%3Cpath d='M10 20 L15 14 L18 17 L23 11' fill='none' stroke='%2307110B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <span class="brand">Paper Trader</span>
+    <p class="totals">
+      <span class="total fig" id="portfolio-total">$10,000.00</span>
+      <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
+    </p>
+  </header>
+
+  <main class="layout">
+    <div class="col left">
+
+      <section class="block" aria-labelledby="h-search">
+        <h2 id="h-search">Find a coin</h2>
+        <form id="search-form" novalidate>
+          <div class="row">
+            <label class="visually-hidden" for="search-input">Coin name</label>
+            <input id="search-input" type="search" placeholder="bitcoin, eth, sol" autocomplete="off">
+            <button type="submit" class="quiet" id="search-btn">Search</button>
+          </div>
+          <p class="field-msg" id="search-msg" aria-live="polite"></p>
+        </form>
+        <ul class="results" id="search-results" aria-label="Matches"></ul>
+      </section>
+
+      <section class="block coin" aria-labelledby="h-coin" aria-live="polite">
+        <h2 id="h-coin">Coin</h2>
+        <p class="muted" id="coin-empty">Search a coin to start, like bitcoin or sol.</p>
+        <p class="muted" id="coin-loading" hidden>Loading…</p>
+        <p class="error" id="coin-error" hidden><span id="coin-error-text"></span> <button type="button" class="quiet small" id="coin-retry">Retry</button></p>
+        <div id="coin-body" hidden>
+          <p class="coin-name"><span id="coin-name"></span> <span class="muted fig" id="coin-symbol"></span></p>
+          <p class="price fig" id="coin-price"></p>
+          <p class="muted fig" id="coin-change"></p>
+          <p class="muted" id="coin-updated"></p>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="h-trade">
+        <h2 id="h-trade">Trade</h2>
+        <div class="forms">
+          <form id="buy-form" novalidate>
+            <label for="buy-amount">Buy, in dollars</label>
+            <div class="row">
+              <input id="buy-amount" class="fig" type="text" inputmode="decimal" placeholder="250" disabled>
+              <button type="submit" class="buy" id="buy-btn" disabled>Buy</button>
+            </div>
+            <p class="field-msg" id="buy-msg" aria-live="polite"></p>
+          </form>
+          <form id="sell-form" novalidate>
+            <label for="sell-amount">Sell, in dollars</label>
+            <div class="row">
+              <input id="sell-amount" class="fig" type="text" inputmode="decimal" placeholder="250" disabled>
+              <button type="submit" class="sell" id="sell-btn" disabled>Sell</button>
+              <button type="button" class="quiet" id="sell-all-btn" disabled>Sell all</button>
+            </div>
+            <p class="field-msg" id="sell-msg" aria-live="polite"></p>
+          </form>
+        </div>
+        <p class="note" id="trade-note" aria-live="polite"></p>
+      </section>
+
+      <section class="block" aria-labelledby="h-mood" aria-live="polite">
+        <h2 id="h-mood">Mood</h2>
+        <p class="muted" id="mood-loading">Loading…</p>
+        <p class="error" id="mood-error" hidden><span id="mood-error-text"></span> <button type="button" class="quiet small" id="mood-retry">Retry</button></p>
+        <div class="mood" id="mood-body" hidden>
+          <p class="mood-fng"><span class="mood-number fig" id="fng-value"></span> <span id="fng-label"></span> <span class="muted">Fear &amp; Greed</span></p>
+          <p class="mood-news" id="headline-mood"><span class="muted">Headlines</span> <span class="fig" id="headline-score">—</span> <span id="headline-label"></span></p>
+        </div>
+      </section>
+
+    </div>
+    <div class="col right">
+
+      <section class="block" aria-labelledby="h-news" aria-live="polite">
+        <h2 id="h-news">News</h2>
+        <p class="muted" id="news-empty">Pick a coin to see its news.</p>
+        <p class="muted" id="news-loading" hidden>Loading…</p>
+        <p class="error" id="news-error" hidden><span id="news-error-text"></span> <button type="button" class="quiet small" id="news-retry">Retry</button></p>
+        <ul class="news" id="news-list" hidden></ul>
+      </section>
+
+      <section class="block" aria-labelledby="h-portfolio">
+        <h2 id="h-portfolio">Portfolio</h2>
+        <p class="cash">Cash <span class="fig" id="cash">$10,000.00</span></p>
+        <p class="muted" id="positions-empty">No positions yet.</p>
+        <table class="grid" id="positions-table" hidden>
+          <thead>
+            <tr><th>Coin</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th></tr>
+          </thead>
+          <tbody id="positions-body"></tbody>
+          <tfoot>
+            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td></tr>
+          </tfoot>
+        </table>
+      </section>
+
+      <section class="block" aria-labelledby="h-trades">
+        <h2 id="h-trades">Trades</h2>
+        <p class="muted" id="trades-empty">No trades yet.</p>
+        <table class="grid" id="trades-table" hidden>
+          <thead>
+            <tr><th>Time</th><th>Side</th><th>Coin</th><th>Units</th><th>Price</th><th>Dollars</th><th>Realized</th></tr>
+          </thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="foot">
+    <details class="rules-box" id="rules-box">
+      <summary><span id="rules-summary">$10,000 to start, 5 trades a day, $500 daily loss limit.</span> <span class="summary-action">Edit</span></summary>
+      <form id="rules-form" class="rules" novalidate>
+        <div class="rule">
+          <label for="rule-cash">Starting cash</label>
+          <input id="rule-cash" class="fig" type="text" inputmode="numeric">
+          <p class="field-msg" id="rule-cash-msg"></p>
+        </div>
+        <div class="rule">
+          <label for="rule-trades">Max trades per day</label>
+          <input id="rule-trades" class="fig" type="text" inputmode="numeric">
+          <p class="field-msg" id="rule-trades-msg"></p>
+        </div>
+        <div class="rule">
+          <label for="rule-loss">Daily loss limit, dollars</label>
+          <input id="rule-loss" class="fig" type="text" inputmode="numeric">
+          <p class="field-msg" id="rule-loss-msg"></p>
+        </div>
+        <button type="submit" class="quiet">Save rules</button>
+      </form>
+    </details>
+    <button type="button" class="quiet danger" id="start-over">Start over</button>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
