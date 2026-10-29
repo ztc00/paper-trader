@@ -370,7 +370,9 @@ select:focus { border-color: var(--up); outline: 2px solid var(--up); outline-of
 select:disabled { opacity: 0.4; }
 
 .order { margin-top: 16px; }
-.order #order-price, .order #order-dollars { flex: 0 1 120px; }
+.order .row { flex-wrap: wrap; }
+.order select { flex: 1 1 100%; }
+.order #order-price, .order #order-dollars { flex: 1 1 100px; }
 
 .orders {
   list-style: none;
@@ -532,6 +534,10 @@ select:disabled { opacity: 0.4; }
 
   .forms { flex-direction: row; }
   .forms form { flex: 1; }
+
+  .order .row { flex-wrap: nowrap; }
+  .order select { flex: 1 1 auto; }
+  .order #order-price, .order #order-dollars { flex: 0 1 120px; }
 
   .foot { flex-direction: row; justify-content: space-between; align-items: flex-start; }
   .rules-box { flex: 1; }
