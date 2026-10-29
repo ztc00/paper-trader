@@ -990,10 +990,16 @@ function renderPortfolio() {
       p.symbol, fmtUnits(p.units), fmtMoney(p.avgPrice), q ? fmtMoney(price) : "—", fmtMoney(v),
       [`${fmtSigned(gain)} (${fmtPct(pct)})`, upDown(gain)], "",
     ]);
+    const sellBtn = el("button", "Sell…", "quiet close-btn sell-btn");
+    sellBtn.type = "button";
+    sellBtn.dataset.id = p.id;
+    sellBtn.title = "Load this position into the ticket on the Sell side";
     const close = el("button", "Close", "quiet close-btn");
     close.type = "button";
     close.dataset.id = p.id;
+    close.title = "Sell it all at the market now";
     close.disabled = !q || Boolean(blockReason());
+    tr.lastChild.appendChild(sellBtn);
     tr.lastChild.appendChild(close);
     els.positionsBody.appendChild(tr);
   }
@@ -1097,14 +1103,26 @@ function renderNews() {
   }
   for (const a of news) {
     const li = document.createElement("li");
+    if (a.image && /^https:\/\//.test(a.image)) {
+      const img = document.createElement("img");
+      img.className = "news-img";
+      img.src = a.image;
+      img.alt = "";
+      img.loading = "lazy";
+      img.referrerPolicy = "no-referrer";
+      img.addEventListener("error", () => img.remove()); // a dead image just goes
+      li.appendChild(img);
+    }
+    const text = el("div", "", "news-text");
+    li.appendChild(text);
     const link = el("a", a.title);
     if (/^https?:\/\//.test(a.url)) link.href = a.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     const score = scoreHeadline(a.title);
     const mark = score > 0 ? " · +1" : score < 0 ? " · −1" : " · 0";
-    li.appendChild(link);
-    li.appendChild(el("span", `${a.source || "Unknown source"} · ${timeAgo(new Date(a.publishedAt))}${mark}`, "muted"));
+    text.appendChild(link);
+    text.appendChild(el("span", `${a.source || "Unknown source"} · ${timeAgo(new Date(a.publishedAt))}${mark}`, "muted"));
     els.newsList.appendChild(li);
   }
 }
@@ -1241,7 +1259,28 @@ els.ordersList.addEventListener("click", (e) => {
   if (btn) cancelOrder(Number(btn.dataset.id));
 });
 
+// Sell…: the position goes into the ticket on the Sell side, all of it, at
+// the market, ready to review. Close: sold at the market right away.
+function sellFromTicket(id) {
+  const pos = positionFor(id);
+  if (!pos) return;
+  if (state.selected !== id) {
+    selectCoin({ id: pos.id, name: pos.name, symbol: pos.symbol });
+    if (state.market !== (isStock(id) ? "stocks" : "crypto")) setMarket(isStock(id) ? "stocks" : "crypto");
+  }
+  ticket.side = "Sell";
+  ticket.mode = "units";
+  ticket.reviewing = false;
+  els.tType.value = "market";
+  els.tQty.value = pos.units.toPrecision(6);
+  renderTicket();
+  els.ticket.scrollIntoView({ behavior: "smooth", block: "start" });
+  els.tReview.focus();
+}
+
 els.positionsBody.addEventListener("click", (e) => {
+  const sellBtn = e.target.closest(".sell-btn");
+  if (sellBtn) { sellFromTicket(sellBtn.dataset.id); return; }
   const btn = e.target.closest(".close-btn");
   if (btn) closePosition(btn.dataset.id);
 });

@@ -107,7 +107,11 @@ async function news(symbol, key) {
     .filter((a) => /^https?:\/\//.test(a.url || "") && a.headline)
     .sort((a, b) => b.datetime - a.datetime)
     .slice(0, 5)
-    .map((a) => ({ title: a.headline, url: a.url, source: a.source, publishedAt: new Date(a.datetime * 1000).toISOString() }));
+    .map((a) => ({
+      title: a.headline, url: a.url, source: a.source,
+      image: /^https:\/\//.test(a.image || "") ? a.image : null,
+      publishedAt: new Date(a.datetime * 1000).toISOString(),
+    }));
   const brief = articles.length ? await readHeadlines(`the stock ${s}`, articles.map((a) => a.title)) : null;
   return json({ articles, brief, briefError: brief ? undefined : "unavailable" }, 200, cacheFor(brief, articles));
 }

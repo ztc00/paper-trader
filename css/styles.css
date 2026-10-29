@@ -460,6 +460,8 @@ label .seg { margin-left: 8px; vertical-align: middle; }
 .history .table-wrap, .history p { margin-top: 8px; }
 
 .close-btn { height: 26px; padding: 0 8px; font-size: 13px; }
+.close-btn + .close-btn { margin-left: 4px; }
+.grid td .close-btn { white-space: nowrap; }
 
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
 .toast { padding: 10px 14px; background: var(--surface); border: 1px solid var(--edge); border-left: 3px solid var(--up); border-radius: var(--radius); font-size: var(--small); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
@@ -554,8 +556,19 @@ select:disabled { opacity: 0.4; }
   padding: 10px 0;
   border-bottom: 1px solid var(--hairline);
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.news-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.news-img {
+  width: 88px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--well);
+  flex-shrink: 0;
 }
 
 .news li:last-child { border-bottom: 0; }

@@ -37,6 +37,7 @@ export default {
       .map((a) => ({
         title: a.title,
         url: a.url,
+        image: /^https:\/\//.test(a.image || "") ? a.image : null,
         source: a.source && a.source.name,
         publishedAt: a.publishedAt,
       }));
