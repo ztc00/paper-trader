@@ -93,6 +93,32 @@ const els = {
   coinPrice: $("coin-price"),
   coinChange: $("coin-change"),
   coinUpdated: $("coin-updated"),
+  buyForm: $("buy-form"),
+  buyAmount: $("buy-amount"),
+  buyBtn: $("buy-btn"),
+  buyMsg: $("buy-msg"),
+  sellForm: $("sell-form"),
+  sellAmount: $("sell-amount"),
+  sellBtn: $("sell-btn"),
+  sellAllBtn: $("sell-all-btn"),
+  sellMsg: $("sell-msg"),
+  tradeNote: $("trade-note"),
+  cash: $("cash"),
+  positionsEmpty: $("positions-empty"),
+  positionsTable: $("positions-table"),
+  positionsBody: $("positions-body"),
+  positionsValue: $("positions-value"),
+  positionsPnl: $("positions-pnl"),
+  tradesEmpty: $("trades-empty"),
+  tradesTable: $("trades-table"),
+  tradesBody: $("trades-body"),
+  rulesBox: $("rules-box"),
+  rulesSummary: $("rules-summary"),
+  rulesForm: $("rules-form"),
+  ruleCash: $("rule-cash"),
+  ruleTrades: $("rule-trades"),
+  ruleLoss: $("rule-loss"),
+  startOver: $("start-over"),
 };
 
 function show(el, on) {
@@ -180,6 +206,98 @@ function selectCoin(coin) {
   fetchPrices();
 }
 
+// ---------- Trading ----------
+
+function readAmount(input, msgEl) {
+  const raw = input.value.trim();
+  const n = Number(raw);
+  if (raw === "" || !Number.isFinite(n) || n <= 0) {
+    msgEl.textContent = "Enter a dollar amount above 0, like 250.";
+    input.classList.add("invalid");
+    return null;
+  }
+  msgEl.textContent = "";
+  input.classList.remove("invalid");
+  return n;
+}
+
+function positionFor(id) {
+  return state.positions.find((p) => p.id === id) || null;
+}
+
+function isToday(iso) {
+  return new Date(iso).toDateString() === new Date().toDateString();
+}
+
+// Why the rules block right now, or null if they do not.
+function blockReason() {
+  const today = state.trades.filter((t) => isToday(t.time));
+  if (today.length >= state.rules.maxTrades) {
+    return `${today.length} of ${state.rules.maxTrades} trades today. Back tomorrow.`;
+  }
+  const realized = today.reduce((sum, t) => sum + (t.realized || 0), 0);
+  if (realized <= -state.rules.lossLimit) {
+    return `Daily loss limit reached (${fmtSigned(realized)} realized). Back tomorrow.`;
+  }
+  return null;
+}
+
+function logTrade(side, units, price, dollars, realized) {
+  state.trades.unshift({
+    id: Date.now(),
+    time: new Date().toISOString(),
+    coinId: selectedCoin.id,
+    symbol: selectedCoin.symbol,
+    side,
+    units,
+    price,
+    dollars,
+    realized,
+  });
+}
+
+function buy(dollars) {
+  const price = prices[state.selected].price;
+  const units = dollars / price;
+  const pos = positionFor(state.selected);
+  if (pos) {
+    // New average price: total paid so far plus this buy, over total units.
+    pos.avgPrice = (pos.avgPrice * pos.units + dollars) / (pos.units + units);
+    pos.units += units;
+  } else {
+    state.positions.push({ ...selectedCoin, units, avgPrice: price });
+  }
+  state.cash -= dollars;
+  logTrade("Buy", units, price, dollars, null);
+  save();
+  render();
+}
+
+function sell(dollars) {
+  const price = prices[state.selected].price;
+  const pos = positionFor(state.selected);
+  const units = Math.min(dollars / price, pos.units);
+  const got = units * price;
+  const realized = (price - pos.avgPrice) * units;
+  pos.units -= units;
+  if (pos.units * price < 0.01) {
+    state.positions = state.positions.filter((p) => p !== pos);
+  }
+  state.cash += got;
+  logTrade("Sell", units, price, got, realized);
+  save();
+  render();
+}
+
+function startOver() {
+  state.cash = state.rules.startingCash;
+  state.positions = [];
+  state.trades = [];
+  save();
+  render();
+  fetchPrices();
+}
+
 // ---------- Rendering ----------
 
 function setCoinView(which, message) {
@@ -214,8 +332,94 @@ function renderCoin() {
   els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)}`;
 }
 
+function renderTrade() {
+  const ready = Boolean(state.selected && prices[state.selected]);
+  const reason = blockReason();
+  const pos = state.selected ? positionFor(state.selected) : null;
+  els.buyAmount.disabled = !ready || Boolean(reason);
+  els.buyBtn.disabled = !ready || Boolean(reason);
+  els.sellAmount.disabled = !ready || Boolean(reason) || !pos;
+  els.sellBtn.disabled = !ready || Boolean(reason) || !pos;
+  els.sellAllBtn.disabled = !ready || Boolean(reason) || !pos;
+  if (reason) {
+    els.tradeNote.textContent = reason;
+    els.tradeNote.className = "note block";
+  } else {
+    els.tradeNote.textContent = "";
+    els.tradeNote.className = "note";
+  }
+}
+
+function positionValue(p) {
+  const q = prices[p.id];
+  return q ? p.units * q.price : p.units * p.avgPrice;
+}
+
+function renderPortfolio() {
+  els.cash.textContent = fmtMoney(state.cash);
+  const any = state.positions.length > 0;
+  show(els.positionsEmpty, !any);
+  show(els.positionsTable, any);
+  els.positionsBody.innerHTML = "";
+  let value = 0;
+  let pnl = 0;
+  for (const p of state.positions) {
+    const q = prices[p.id];
+    const price = q ? q.price : p.avgPrice;
+    const v = p.units * price;
+    const gain = v - p.units * p.avgPrice;
+    const pct = (gain / (p.units * p.avgPrice)) * 100;
+    value += v;
+    pnl += gain;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.symbol}</td><td>${fmtUnits(p.units)}</td><td>${fmtMoney(p.avgPrice)}</td><td>${q ? fmtMoney(price) : "—"}</td><td>${fmtMoney(v)}</td><td class="${upDown(gain)}">${fmtSigned(gain)} (${fmtPct(pct)})</td>`;
+    els.positionsBody.appendChild(tr);
+  }
+  els.positionsValue.textContent = fmtMoney(value);
+  els.positionsPnl.textContent = fmtSigned(pnl);
+  els.positionsPnl.className = "fig " + upDown(pnl);
+
+  // Header: everything I own plus cash, against what I started with.
+  const total = state.cash + value;
+  const since = total - state.rules.startingCash;
+  const sincePct = (since / state.rules.startingCash) * 100;
+  els.total.textContent = fmtMoney(total);
+  els.pnl.textContent = `${fmtSigned(since)} (${fmtPct(sincePct)})`;
+  els.pnl.className = "pnl fig " + upDown(since);
+}
+
+function renderTrades() {
+  const any = state.trades.length > 0;
+  show(els.tradesEmpty, !any);
+  show(els.tradesTable, any);
+  els.tradesBody.innerHTML = "";
+  for (const t of state.trades) {
+    const when = new Date(t.time);
+    const time = when.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
+      when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const realized = t.realized == null ? "" : `<span class="${upDown(t.realized)}">${fmtSigned(t.realized)}</span>`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${time}</td><td class="${t.side === "Buy" ? "up" : "down"}">${t.side}</td><td>${t.symbol}</td><td>${fmtUnits(t.units)}</td><td>${fmtMoney(t.price)}</td><td>${fmtMoney(t.dollars)}</td><td>${realized}</td>`;
+    els.tradesBody.appendChild(tr);
+  }
+}
+
+function renderRules() {
+  const r = state.rules;
+  els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit.`;
+  if (!els.rulesBox.open) {
+    els.ruleCash.value = r.startingCash;
+    els.ruleTrades.value = r.maxTrades;
+    els.ruleLoss.value = r.lossLimit;
+  }
+}
+
 function render() {
   renderCoin();
+  renderTrade();
+  renderPortfolio();
+  renderTrades();
+  renderRules();
 }
 
 // ---------- Events ----------
@@ -237,6 +441,85 @@ els.results.addEventListener("click", (e) => {
 });
 
 els.coinRetry.addEventListener("click", fetchPrices);
+
+els.buyForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const dollars = readAmount(els.buyAmount, els.buyMsg);
+  if (dollars == null) return;
+  if (dollars > state.cash) {
+    els.buyMsg.textContent = `You have ${fmtMoney(state.cash)} in cash.`;
+    els.buyAmount.classList.add("invalid");
+    return;
+  }
+  buy(dollars);
+  els.buyAmount.value = "";
+});
+
+els.sellForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const pos = positionFor(state.selected);
+  if (!pos) {
+    els.sellMsg.textContent = `You do not hold any ${selectedCoin.symbol}.`;
+    return;
+  }
+  const dollars = readAmount(els.sellAmount, els.sellMsg);
+  if (dollars == null) return;
+  const worth = positionValue(pos);
+  if (dollars > worth + 0.005) {
+    els.sellMsg.textContent = `You hold ${fmtMoney(worth)} of ${pos.symbol}.`;
+    els.sellAmount.classList.add("invalid");
+    return;
+  }
+  sell(dollars);
+  els.sellAmount.value = "";
+});
+
+els.sellAllBtn.addEventListener("click", () => {
+  const pos = positionFor(state.selected);
+  if (!pos) return;
+  els.sellMsg.textContent = "";
+  els.sellAmount.classList.remove("invalid");
+  sell(positionValue(pos));
+  els.sellAmount.value = "";
+});
+
+const RULE_FIELDS = [
+  ["startingCash", els.ruleCash, $("rule-cash-msg")],
+  ["maxTrades", els.ruleTrades, $("rule-trades-msg")],
+  ["lossLimit", els.ruleLoss, $("rule-loss-msg")],
+];
+
+els.rulesForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const next = {};
+  let ok = true;
+  for (const [key, input, msg] of RULE_FIELDS) {
+    const n = Number(input.value.trim());
+    if (input.value.trim() === "" || !Number.isInteger(n) || n <= 0) {
+      msg.textContent = "Use a whole number above 0.";
+      input.classList.add("invalid");
+      ok = false;
+    } else {
+      msg.textContent = "";
+      input.classList.remove("invalid");
+      next[key] = n;
+    }
+  }
+  if (!ok) return;
+  // Changing the starting cash moves the cash by the same amount, so a
+  // portfolio in progress is not wiped.
+  state.cash += next.startingCash - state.rules.startingCash;
+  state.rules = next;
+  save();
+  els.rulesBox.open = false;
+  render();
+});
+
+els.rulesBox.addEventListener("toggle", () => {
+  els.rulesBox.querySelector(".summary-action").textContent = els.rulesBox.open ? "Close" : "Edit";
+});
+
+els.startOver.addEventListener("click", startOver);
 
 // ---------- Start ----------
 
