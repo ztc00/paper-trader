@@ -24,17 +24,47 @@ function scale(points) {
   return { minX, maxX, minY: minY - air, maxY: maxY + air };
 }
 
-// A smooth path through the points (Catmull-Rom turned into cubic curves).
+// A smooth path through the points that never overshoots them (monotone
+// cubic, Fritsch-Carlson). A sharp turn stays a turn instead of a hook.
 function smoothPath(pts) {
-  if (pts.length < 3) return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const n = pts.length;
+  if (n < 3) return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const dx = [], dy = [], m = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1][0] - pts[i][0] || 1e-6);
+    dy.push(pts[i + 1][1] - pts[i][1]);
+    m.push(dy[i] / dx[i]);
+  }
+  const t = [m[0]];
+  for (let i = 1; i < n - 1; i++) {
+    t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+  }
+  t.push(m[n - 2]);
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+    if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
   let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = pts[i][0] + dx[i] / 3, c1y = pts[i][1] + (t[i] * dx[i]) / 3;
+    const c2x = pts[i + 1][0] - dx[i] / 3, c2y = pts[i + 1][1] - (t[i + 1] * dx[i]) / 3;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${pts[i + 1][0].toFixed(1)},${pts[i + 1][1].toFixed(1)}`;
   }
   return d;
+}
+
+// Where a time lands when points are spaced evenly (one slot per bar, so a
+// market's nights and weekends take no room): its index, with a fraction
+// between the two bars around it.
+function slotOf(points, t) {
+  if (t <= points[0][0]) return 0;
+  const last = points.length - 1;
+  if (t >= points[last][0]) return last;
+  let lo = 0, hi = last;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid][0] <= t) lo = mid; else hi = mid; }
+  const span = points[hi][0] - points[lo][0] || 1;
+  return lo + (t - points[lo][0]) / span;
 }
 
 function chartWidth(svg) {
@@ -45,7 +75,9 @@ function chartWidth(svg) {
 // A value over time. points: [[timeMs, value], ...], oldest first.
 // opts: height, fmt (value label), fmtTime (axis), fmtHover (readout),
 // markers [{t, price, side}], baseline (a dashed reference line, like the
-// starting cash), lastLine (dashed line at the last value with a tag).
+// starting cash), lastLine (dashed line at the last value with a tag),
+// evenly (one slot per point instead of wall-clock time: for stock bars,
+// which only exist during market hours).
 function drawLineChart(svg, points, opts = {}) {
   svg.replaceChildren();
   const W = chartWidth(svg), H = opts.height || 240;
@@ -57,7 +89,10 @@ function drawLineChart(svg, points, opts = {}) {
 
   const all = opts.baseline != null ? points.concat([[points[0][0], opts.baseline]]) : points;
   const s = scale(all);
-  const x = (t) => padL + ((t - s.minX) / (s.maxX - s.minX)) * (W - padL - padR);
+  const plotW = W - padL - padR;
+  const x = opts.evenly
+    ? (t) => padL + (slotOf(points, t) / (points.length - 1)) * plotW
+    : (t) => padL + ((t - s.minX) / (s.maxX - s.minX)) * plotW;
   const y = (v) => padT + (1 - (v - s.minY) / (s.maxY - s.minY)) * (H - padT - padB);
   const fmt = opts.fmt || ((v) => v.toFixed(2));
 
@@ -106,7 +141,8 @@ function drawLineChart(svg, points, opts = {}) {
   }
 
   // Time labels: first, middle, last.
-  for (const t of [s.minX, (s.minX + s.maxX) / 2, s.maxX]) {
+  const midT = opts.evenly ? points[Math.floor((points.length - 1) / 2)][0] : (s.minX + s.maxX) / 2;
+  for (const t of [s.minX, midT, s.maxX]) {
     const anchor = t === s.minX ? "start" : t === s.maxX ? "end" : "middle";
     const label = svgEl("text", { x: x(t), y: H - 8, class: "axis", "text-anchor": anchor });
     label.textContent = opts.fmtTime ? opts.fmtTime(t) : new Date(t).toLocaleDateString();
@@ -127,10 +163,16 @@ function drawLineChart(svg, points, opts = {}) {
   svg.onpointermove = (e) => {
     const rect = svg.getBoundingClientRect();
     const mx = ((e.clientX - rect.left) / rect.width) * W;
-    const t = s.minX + ((mx - padL) / (W - padL - padR)) * (s.maxX - s.minX);
-    let lo = 0, hi = points.length - 1;
-    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid][0] < t) lo = mid; else hi = mid; }
-    const pt = Math.abs(points[lo][0] - t) < Math.abs(points[hi][0] - t) ? points[lo] : points[hi];
+    let pt;
+    if (opts.evenly) {
+      const i = Math.round(((mx - padL) / plotW) * (points.length - 1));
+      pt = points[Math.max(0, Math.min(points.length - 1, i))];
+    } else {
+      const t = s.minX + ((mx - padL) / plotW) * (s.maxX - s.minX);
+      let lo = 0, hi = points.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid][0] < t) lo = mid; else hi = mid; }
+      pt = Math.abs(points[lo][0] - t) < Math.abs(points[hi][0] - t) ? points[lo] : points[hi];
+    }
     const cx = x(pt[0]), cy = y(pt[1]);
     cross.setAttribute("x1", cx); cross.setAttribute("x2", cx);
     dot.setAttribute("cx", cx); dot.setAttribute("cy", cy);

@@ -732,6 +732,7 @@ function renderChart() {
   };
   drawLineChart(els.chart, points, {
     height: 260,
+    evenly: isStock(state.selected), // stock bars only exist in market hours
     markers,
     fmt: (v) => fmtMoney(v),
     fmtTime,
