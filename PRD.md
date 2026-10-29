@@ -70,6 +70,61 @@ selected coin's price. On a laptop, two columns: left is search, the coin,
 trade and mood; right is news, portfolio and trades. The price is the
 biggest number on the page.
 
+## Version 2, added 2026-10-29
+
+After version 1 worked end to end, I asked for the tool to stop being basic.
+Everything below is built on the same `state` and the same rules.
+
+11. **Live prices.** The browser opens Coinbase's public ticker feed
+    (`wss://ws-feed.exchange.coinbase.com`, no key) for the selected coin,
+    every coin I hold and the tape. Prices tick in real time, the price
+    flashes green or red on each move, and P&L updates live. Coins Coinbase
+    does not list keep the 60-second CoinGecko price. The line under the
+    price says which one is feeding it.
+12. **Tape.** A strip under the header with the top 10 coins by market cap:
+    symbol, live price, 24h change and a 7-day sparkline. Click one to select
+    it. Refreshed every 60 seconds from CoinGecko.
+13. **Chart.** The selected coin's price over 1D, 7D, 30D or 1Y from
+    CoinGecko's `market_chart`, drawn as inline SVG with a hover crosshair and
+    readout, faint grid lines with prices, and my own buys and sells marked
+    as green and red dots. The live price is the last point. Cached five
+    minutes per coin and range.
+14. **Orders.** Limit buy ("buy $X when it drops to P"), stop-loss and
+    take-profit ("sell all if it falls to / rises to P") on the selected
+    coin. Checked on every live tick and every poll, filled at the price that
+    crossed, logged with the order type. My rules hold an order until
+    tomorrow when they block. Cancel from the list.
+15. **Position size by my rules.** Two more rules: risk per trade as a % of
+    cash, and the stop distance in %. The Buy label shows the size they
+    imply, cash × risk% ÷ stop%, with a Use button that fills the field.
+16. **Performance.** An equity curve of portfolio value over time (one point a
+    minute at most, plus one per trade, capped at 1,000 points), and stats
+    worked out from the log: realized and unrealized P&L, win rate, average
+    win and loss, profit factor, best and worst trade, max drawdown.
+17. **Export.** The trade log as a CSV file, from the browser, no server.
+18. **AI read.** The news function also asks a model, through the class
+    OpenRouter key, for a two-sentence brief and a one-word sentiment on the
+    five headlines, and the page shows it beside my own word-list score so
+    the two can be compared. The model's answer is cached with the news for
+    an hour. Without the key the headlines and my score still show.
+
+States for the new parts:
+
+- **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;
+  "Updated 12s ago · CoinGecko" otherwise. If the feed drops, it reconnects
+  on its own, waiting longer each time up to 30 seconds, and the page falls
+  back to the poll meanwhile.
+- **Tape loading:** "Loading the top coins…"; **error:** "Could not load the
+  top coins." and the strip stays as it was.
+- **Chart loading:** "Loading…" beside the range buttons; **error:** "Chart
+  is not available right now." and the old chart stays.
+- **Orders invalid:** "Enter a price above 0.", "That is above the price now,
+  $X. Just buy.", "A stop goes below the price now, $X.", "A take-profit goes
+  above the price now, $X.", "You do not hold any BTC.", and the cash check.
+- **Performance empty:** the curve is a flat line at the starting cash and the
+  stats show "—" until there is a sell.
+- **AI read missing:** the block is hidden; the headlines and my score show.
+
 ## Content and data
 
 - Have: the three API URLs and the fields I use (in PROPOSAL.md), the rule
@@ -137,15 +192,13 @@ Follows DESIGN.md.
 
 ## Out of scope
 
-Real money, broker connections, logins, limit orders, short selling, stocks
-(needs another keyed API), charts, an LLM reading the news. No frameworks,
-no libraries, nothing from a CDN.
+Real money, broker connections, logins, short selling, stocks (needs another
+keyed API). No frameworks, no libraries, nothing from a CDN.
 
 ## Later
 
 - Stocks through Finnhub, with a second function.
-- A sparkline from CoinGecko's 7-day data.
-- Sentiment from a model through the class OpenRouter key, compared against
-  my word lists.
-- Export the trade log.
-- A daily P&L chart.
+- Short selling.
+- Candlesticks instead of a line.
+- A watchlist of my own coins, not only the top 10.
+- Trailing stops.

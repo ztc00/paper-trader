@@ -7,17 +7,29 @@ live price and my own P&L in the first five seconds.
 
 ## What it does
 
-You search a coin, see its live price, and buy or sell a paper amount of it.
-The page keeps your cash, positions and trades in your browser and works out
-what every position is worth right now, your profit or loss on each one, and
-your total since you started. Your Trade Check rules come along: a max number
-of trades a day and a daily loss limit that block the Buy and Sell buttons
-when you hit them.
+You search a coin, or pick one off the tape of the top 10, and buy or sell a
+paper amount of it at the live price. Prices tick in real time from
+Coinbase's public feed, so your P&L moves while you watch. The page keeps
+your cash, positions, orders and trades in your browser and works out what
+every position is worth right now, your profit or loss on each one, and your
+total since you started.
+
+Your Trade Check rules come along and grow: a max number of trades a day and
+a daily loss limit that block the Buy and Sell buttons when you hit them, plus
+a risk per trade and a stop distance that turn into a suggested position
+size with one click.
+
+Around the price: a chart over 1D to 1Y with a hover readout and your own
+trades marked on it; limit, stop-loss and take-profit orders that fill on the
+live price; a performance panel with an equity curve, win rate, profit factor
+and max drawdown; and a CSV export of the log.
 
 Two more things sit next to the price. The Crypto Fear & Greed Index says what
 mood the whole market is in. And the five latest headlines about the coin get
 a sentiment score from my own word lists, so the page can tell you the news
-reads positive, mixed or negative before you buy.
+reads positive, mixed or negative before you buy. A model reads the same five
+headlines through the class OpenRouter key and gives a two-sentence brief and
+its own sentiment, shown beside mine so the two can be compared.
 
 ## The APIs
 
@@ -29,17 +41,25 @@ reads positive, mixed or negative before you buy.
 - **Crypto Fear & Greed Index** by alternative.me (free, no key):
   https://alternative.me/crypto/fear-and-greed-index/
   - `GET https://api.alternative.me/fng/?limit=1` for today's number and label.
+- **Coinbase Exchange ticker feed** (free, no key, WebSocket):
+  https://docs.cdp.coinbase.com/exchange/docs/websocket-overview
+  - `wss://ws-feed.exchange.coinbase.com`, channel `ticker`, one product per
+    subscribe message, so a coin Coinbase does not list only rejects itself.
 - **GNews** (free key, 100 requests a day): https://gnews.io/docs/v4
   - Called only from `api/news.js`, the one Vercel function. The page asks
     `/api/news?q=bitcoin`, the function adds the key from Vercel's settings
     and answers with a one-hour cache header, so the news updates hourly and
     the key is in no file in this repo.
+- **OpenRouter** (the class key, one model): https://openrouter.ai/docs
+  - Called from the same function, right after GNews, with the five
+    headlines. Cached with them for an hour. Without the key the page still
+    shows the headlines and my own score.
 
 ## How to use it
 
-1. Type a coin name under **Find a coin** and press Enter. Pick one of the
-   matches. Its live price, 24h and 7d change appear, with the news under it
-   and the mood beside it.
+1. Type a coin name under **Find a coin** and press Enter, or click a coin on
+   the tape. Its live price, 24h and 7d change and chart appear, with the
+   news on the right and the mood under the trade forms.
 2. Type a dollar amount under **Buy** and press Enter or Buy. Cash goes down,
    a row appears in the portfolio. Buying more of the same coin updates its
    average price.
@@ -47,8 +67,14 @@ reads positive, mixed or negative before you buy.
    shows the realized profit or loss on that sale.
 4. Read the portfolio: value and P&L per coin and in total, and the header
    for your total since the start.
-5. **Edit** the rules at the bottom: starting cash, max trades a day, daily
-   loss limit. **Start over** puts cash back and clears positions and trades.
+5. Place an **order** instead of trading now: buy when the price drops to a
+   level, or sell all if it falls to a stop or rises to a target. It fills
+   on the live price and shows up in the log with its type.
+6. Read **Performance** for the equity curve and the numbers behind it, and
+   **Export CSV** to take the log elsewhere.
+7. **Edit** the rules at the bottom: starting cash, max trades a day, daily
+   loss limit, risk per trade and stop distance. **Start over** puts cash
+   back and clears positions, orders and trades.
 
 ## Files
 
@@ -58,7 +84,11 @@ reads positive, mixed or negative before you buy.
 - `AGENTS.md`: the rules the agent follows.
 - `index.html`, `css/styles.css`, `js/app.js`: the page. Everything saved
   lives in `state` in `js/app.js`.
-- `api/news.js`: the one function. It holds the GNews key and nothing else.
+- `js/live.js`: the Coinbase ticker feed, with reconnects.
+- `js/charts.js`: the price chart, the equity curve and the sparklines, as
+  inline SVG.
+- `api/news.js`: the one function. It holds the GNews and OpenRouter keys
+  and nothing else.
 
 ## Every state
 

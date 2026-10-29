@@ -1,8 +1,10 @@
-// The one function in this project. It holds the GNews key, which lives in
-// Vercel's Environment Variables as GNEWS_API_KEY and in no file here.
-// The page calls /api/news?q=bitcoin and gets back five trimmed headlines.
-// The Cache-Control header keeps the answer for an hour, so the news updates
-// hourly and the key's 100 requests a day are never close to used up.
+// The one function in this project. It holds two keys that live only in
+// Vercel's Environment Variables: GNEWS_API_KEY for the headlines and
+// OPENROUTER_API_KEY (the class key) for a model's two-sentence read of them.
+// The page calls /api/news?q=bitcoin. The Cache-Control header keeps the
+// answer for an hour, so both keys are used at most once an hour per coin.
+
+const MODEL = "deepseek/deepseek-v4.1-flash-1017"; // the only model the class key allows
 
 export default {
   async fetch(request) {
@@ -39,8 +41,46 @@ export default {
         publishedAt: a.publishedAt,
       }));
 
-    return Response.json({ articles }, {
+    const brief = articles.length ? await readHeadlines(q, articles.map((a) => a.title)) : null;
+
+    return Response.json({ articles, brief }, {
       headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600" },
     });
   },
 };
+
+// Ask the model for a two-sentence brief and a one-word sentiment. Answers
+// null when there is no key or anything goes wrong, so the page still shows
+// the headlines and my own word-list score.
+async function readHeadlines(coin, titles) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return null;
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.2,
+        max_tokens: 160,
+        messages: [
+          {
+            role: "system",
+            content: "You read crypto headlines for a paper-trading tool. Answer with JSON only, no prose, in this shape: {\"brief\": \"two short sentences on what is moving the coin\", \"sentiment\": \"positive\" | \"mixed\" | \"negative\"}. Be concrete and neutral. Never give trading advice.",
+          },
+          { role: "user", content: `Coin: ${coin}\nHeadlines:\n${titles.map((t) => "- " + t).join("\n")}` },
+        ],
+      }),
+      signal: AbortSignal.timeout(9000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!text) return null;
+    const json = JSON.parse(text.replace(/^```json\s*|```$/g, "").trim());
+    const sentiment = ["positive", "mixed", "negative"].includes(json.sentiment) ? json.sentiment : "mixed";
+    return { text: String(json.brief || "").slice(0, 400), sentiment, model: MODEL };
+  } catch {
+    return null;
+  }
+}

@@ -181,9 +181,10 @@ Every control is 6px rounded. Tables and sections are square.
 
 ## Motion
 
-- The price text changes in place every 60 seconds. If it went up since the
-  last refresh it flashes **up** for 300ms, down flashes **down**, then it
-  settles back to text color. With reduced motion on, no flash.
+- The price text changes in place on every live tick, at most five times a
+  second. If it went up it flashes **up** for 300ms, down flashes **down**,
+  then it settles back to text color. With reduced motion on, no flash.
+- The chart's crosshair follows the pointer with no easing.
 - Nothing else moves. Loading is a word, not a spinner.
 
 ## Components
@@ -210,6 +211,26 @@ Every control is 6px rounded. Tables and sections are square.
   between rows, P&L cells colored up or down. A total row in bold.
 - **Rules:** folded behind one line that says them in words, with Edit, like
   Trade Check.
+- **Tape (v2):** one strip under the header, items 40px tall with the symbol
+  in bold, the live price and 24h change in figures, and a 60×20 sparkline
+  in up or down. The selected coin gets a green border. Scrolls sideways on
+  a phone, no wrap.
+- **Chart (v2):** inline SVG, 600×220 units, full width. The line is up or
+  down by whether the range ended higher than it started, with the same
+  color under it at 12% for the area. Three faint grid lines with the price
+  in muted 11px figures, three time labels along the bottom. My buys are
+  green dots, sells red dots, with a page-colored ring. Hover draws an edge
+  line and a readout in figures. Range buttons are quiet, small, the active
+  one green.
+- **Live dot (v2):** an 8px green dot before "Live · Coinbase".
+- **Orders (v2):** a select, a price well and a dollars well on one row with
+  a quiet Place button; pending orders as plain rows with an underlined
+  muted Cancel.
+- **Performance (v2):** the equity curve in the chart style, then stats in a
+  two-column grid (three on a laptop), label muted, value in figures and up
+  or down where it is money.
+- **AI read (v2):** a surface-colored box under the headlines, small text,
+  the sentiment word in up or down.
 
 ## Do's and Don'ts
 

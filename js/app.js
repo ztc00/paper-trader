@@ -23,6 +23,7 @@ let lastPriceAt = null;
 let mood = null;   // { value, label } from the Fear & Greed index
 let news = [];     // [{ title, url, source, publishedAt }] for the selected coin
 let newsFor = null; // which coin id the news is for
+let brief = null;   // { text, sentiment, model } the model's read of the news, or null
 let tape = [];     // the top 10 coins by market cap, with 7-day sparklines
 let liveAt = null; // when the last live tick arrived
 let chart = { days: 7, points: [], forId: null }; // the price chart on screen
@@ -145,6 +146,10 @@ const els = {
   newsList: $("news-list"),
   headlineScore: $("headline-score"),
   headlineLabel: $("headline-label"),
+  brief: $("brief"),
+  briefText: $("brief-text"),
+  briefSentiment: $("brief-sentiment"),
+  briefCompare: $("brief-compare"),
   tape: $("tape"),
   chart: $("chart"),
   chartStatus: $("chart-status"),
@@ -417,11 +422,13 @@ async function fetchNews() {
       throw new Error(data.error || `The news function answered ${response.status}`);
     }
     news = data.articles;
+    brief = data.brief || null;
     newsFor = coin.id;
     setNewsView("list");
     render();
   } catch (err) {
     news = [];
+    brief = null;
     newsFor = null;
     setNewsView("error", err.message === "News is not set up yet." ? err.message : "News is not available right now.");
     render();
@@ -911,7 +918,14 @@ function renderTrades() {
 function tradesCsv() {
   const head = ["time", "side", "via", "coin", "units", "price", "dollars", "realized"];
   const rows = state.trades.map((t) => [t.time, t.side, t.via || "", t.symbol, t.units, t.price, t.dollars, t.realized == null ? "" : t.realized]);
-  return [head, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  // Text that starts like a formula gets a quote in front, so a symbol such as
+  // "=SUM" from an API cannot run in a spreadsheet. Numbers are left alone.
+  const cell = (v) => {
+    let t = String(v);
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(t)) t = "'" + t;
+    return `"${t.replace(/"/g, '""')}"`;
+  };
+  return [head, ...rows].map((r) => r.map(cell).join(",")).join("\n");
 }
 
 function renderMood() {
@@ -936,6 +950,15 @@ function renderNews() {
   els.headlineLabel.textContent = h ? h.label : "";
   els.headlineScore.className = "fig " + (h ? (h.label === "positive" ? "up" : h.label === "negative" ? "down" : "") : "");
 
+  show(els.brief, Boolean(newsFor && brief));
+  if (newsFor && brief) {
+    els.briefText.textContent = brief.text;
+    els.briefSentiment.textContent = brief.sentiment;
+    els.briefSentiment.className = "fig " + (brief.sentiment === "positive" ? "up" : brief.sentiment === "negative" ? "down" : "");
+    els.briefCompare.textContent = h
+      ? (h.label === brief.sentiment ? "· my word lists agree" : `· my word lists say ${h.label}`)
+      : "";
+  }
   if (!newsFor) return; // empty, loading or error view is already up
   els.newsList.innerHTML = "";
   if (news.length === 0) {

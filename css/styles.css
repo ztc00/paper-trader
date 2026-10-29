@@ -442,6 +442,18 @@ select:disabled { opacity: 0.4; }
 .news a { color: var(--text); text-decoration: underline; }
 .news a:hover { color: var(--up); }
 
+/* AI read of the headlines */
+
+.brief {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  font-size: var(--small);
+}
+
+.brief-head { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+
 /* Tables */
 
 .cash { font-size: var(--large); margin-bottom: 10px; }
