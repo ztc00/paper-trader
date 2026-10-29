@@ -1101,9 +1101,13 @@ function renderNews() {
     els.newsList.appendChild(el("li", "No recent news about this one.", "muted"));
     return;
   }
+  // A picture that several articles share is the publisher's logo, not a
+  // picture of the story, so it is left out.
+  const seen = {};
+  for (const a of news) if (a.image) seen[a.image] = (seen[a.image] || 0) + 1;
   for (const a of news) {
     const li = document.createElement("li");
-    if (a.image && /^https:\/\//.test(a.image)) {
+    if (a.image && /^https:\/\//.test(a.image) && seen[a.image] === 1) {
       const img = document.createElement("img");
       img.className = "news-img";
       img.src = a.image;
