@@ -155,17 +155,34 @@ function imageFromHead(html) {
   return null;
 }
 
-// Private, loopback, link-local, carrier-NAT and multicast addresses are
-// never fetched, whatever name pointed at them.
+// Every special-purpose range, from Node's own BlockList: private, loopback,
+// link-local, carrier-NAT, documentation, benchmarking, multicast, and the
+// IPv6 forms that carry an IPv4 address inside (mapped, compatible, NAT64,
+// 6to4, Teredo). Anything in here is never fetched, whatever name pointed
+// at it.
+const BLOCKED = new net.BlockList();
+for (const [addr, bits] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
+  ["203.0.113.0", 24], ["224.0.0.0", 3],
+]) BLOCKED.addSubnet(addr, bits, "ipv4");
+for (const [addr, bits] of [
+  ["::", 128], ["::1", 128], ["::", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64],
+  ["2001::", 32], ["2001:db8::", 32], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8],
+]) BLOCKED.addSubnet(addr, bits, "ipv6");
+
 function privateAddress(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
-      || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  // An IPv4 address mapped into IPv6 (::ffff:a.b.c.d or ::ffff:hhhh:hhhh)
+  // is judged as that IPv4 address. (The mapped range itself cannot go in
+  // the BlockList: Node then treats every plain IPv4 address as blocked.)
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i) || ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (mapped) {
+    const v4 = mapped[2] ? [parseInt(mapped[1], 16) >> 8, parseInt(mapped[1], 16) & 255, parseInt(mapped[2], 16) >> 8, parseInt(mapped[2], 16) & 255].join(".") : mapped[1];
+    return privateAddress(v4);
   }
-  const v6 = ip.toLowerCase();
-  if (v6.startsWith("::ffff:")) return privateAddress(v6.slice(7));
-  return v6 === "::1" || v6 === "::" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6) || /^ff/.test(v6);
+  const family = net.isIPv4(ip) ? "ipv4" : net.isIPv6(ip) ? "ipv6" : null;
+  if (!family) return true; // not an address at all: refuse
+  return BLOCKED.check(ip, family);
 }
 
 // Resolve the name, refuse it if any answer is private, and hand the one
