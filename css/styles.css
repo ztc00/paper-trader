@@ -726,10 +726,14 @@ select:disabled { opacity: 0.4; }
 .card dd.small { font-size: 13px; margin-top: 2px; }
 .order-right { display: flex; gap: 12px; align-items: center; }
 
-.alloc { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-.alloc-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--small); }
+.alloc { display: flex; flex-direction: column; gap: 14px; }
+.alloc-bar { display: flex; height: 22px; border-radius: var(--radius); overflow: hidden; background: var(--well); }
+.alloc-bar span { display: block; height: 100%; min-width: 2px; }
+.alloc-bar span + span { border-left: 2px solid var(--bg); }
+.alloc-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 20px; font-size: var(--small); }
 .alloc-legend li { display: flex; align-items: center; gap: 8px; }
-.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.alloc-legend .fig { margin-left: auto; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .filters select, .filters input { flex: 0 1 200px; height: 40px; }

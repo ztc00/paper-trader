@@ -4,7 +4,7 @@
 const els = {
   total: $("portfolio-total"), pnl: $("portfolio-pnl"), updated: $("updated"),
   cardTotal: $("card-total"), cardCash: $("card-cash"), cardSince: $("card-since"), cardToday: $("card-today"), cardTodayNote: $("card-today-note"),
-  allocEmpty: $("alloc-empty"), alloc: $("alloc"), donut: $("donut"), legend: $("legend"),
+  allocEmpty: $("alloc-empty"), alloc: $("alloc"), allocBar: $("alloc-bar"), legend: $("legend"),
   positionsEmpty: $("positions-empty"), positionsTable: $("positions-table"), positionsBody: $("positions-body"),
   positionsCost: $("positions-cost"), positionsValue: $("positions-value"), positionsPnl: $("positions-pnl"),
   ordersEmpty: $("orders-empty"), ordersList: $("orders-list"),
@@ -95,11 +95,18 @@ function render() {
   els.positionsPnl.textContent = fmtSigned(value - cost);
   els.positionsPnl.className = "fig " + upDown(value - cost);
 
-  // Allocation: each holding, then cash.
+  // Allocation: one bar, each holding a slice, cash last.
   if (any) {
     const parts = rows.map((r, i) => ({ label: r.p.symbol, value: r.value, color: SWATCHES[i % SWATCHES.length] }));
     parts.push({ label: "Cash", value: state.cash, color: "var(--text-muted)" });
-    drawDonut(els.donut, parts);
+    els.allocBar.replaceChildren();
+    for (const part of parts) {
+      const seg = document.createElement("span");
+      seg.style.width = `${total > 0 ? (part.value / total) * 100 : 0}%`;
+      seg.style.background = part.color;
+      seg.title = `${part.label} ${total > 0 ? Math.round((part.value / total) * 100) : 0}%`;
+      els.allocBar.appendChild(seg);
+    }
     els.legend.replaceChildren();
     for (const part of parts) {
       const li = document.createElement("li");
@@ -148,8 +155,39 @@ function render() {
   });
 }
 
+// Live ticks from Coinbase for the coins I hold, the same as the desk.
+// live.js calls applyTick and liveStatusChanged; renders are throttled.
+function liveIds() {
+  return [...new Set(state.positions.map((p) => p.id).concat(state.orders.map((o) => o.coinId)))];
+}
+
+function symbolMap() {
+  const map = {};
+  for (const p of state.positions) if (!isStock(p.id)) map[p.symbol] = p.id;
+  for (const o of state.orders) if (!isStock(o.coinId)) map[o.symbol] = o.coinId;
+  return map;
+}
+
+let tickTimer = null;
+function applyTick(symbol, price, bid, ask) {
+  const id = symbolMap()[symbol];
+  if (!id || !prices[id]) return;
+  prices[id].price = price;
+  if (bid > 0 && ask > 0) { prices[id].bid = bid; prices[id].ask = ask; }
+  lastAt = new Date();
+  if (tickTimer) return;
+  tickTimer = setTimeout(() => { tickTimer = null; render(); els.updated.textContent = "Live · Coinbase"; }, 250);
+}
+
+function liveStatusChanged() {}
+
+function watchLive() {
+  liveWatch(Object.keys(symbolMap()));
+}
+
 async function refresh() {
-  const ids = [...new Set(state.positions.map((p) => p.id).concat(state.orders.map((o) => o.coinId)))];
+  const ids = liveIds();
+  watchLive();
   if (ids.length === 0) {
     els.updated.textContent = "";
     render();
@@ -159,6 +197,14 @@ async function refresh() {
   lastAt = new Date();
   els.updated.textContent = failed.length ? `Some prices did not load: ${failed[0]}` : `Prices updated ${timeAgo(lastAt)}`;
   els.updated.className = failed.length ? "error" : "muted";
+  render();
+}
+
+// Stocks have no feed: poll the ones I hold every 15 seconds, like the desk.
+async function refreshStocks() {
+  const ids = liveIds().filter(isStock);
+  if (!ids.length) return;
+  await fetchQuotes(ids);
   render();
 }
 
@@ -178,8 +224,13 @@ els.positionsBody.addEventListener("click", (e) => {
 load();
 render();
 refresh();
-setInterval(refresh, 30 * 1000);
-setInterval(() => { if (lastAt && !els.updated.classList.contains("error")) els.updated.textContent = `Prices updated ${timeAgo(lastAt)}`; }, 1000);
-document.addEventListener("state-changed", refresh);
+setInterval(refresh, 60 * 1000);
+setInterval(refreshStocks, 15 * 1000);
+setInterval(() => {
+  if (!lastAt || els.updated.classList.contains("error")) return;
+  const live = Object.keys(symbolMap()).some((s) => liveHas(s)) && Date.now() - lastAt.getTime() < 90 * 1000;
+  els.updated.textContent = live ? `Live · Coinbase · ${timeAgo(lastAt)}` : `Prices updated ${timeAgo(lastAt)}`;
+}, 1000);
+document.addEventListener("state-changed", () => { refresh(); watchLive(); });
 document.addEventListener("theme-changed", render);
 window.addEventListener("resize", render);
