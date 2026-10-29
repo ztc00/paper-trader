@@ -19,6 +19,8 @@ let prices = {};      // coin id -> { price, change24h, change7d }
 let selectedCoin = null; // { id, name, symbol }
 let lastPriceAt = null;
 let mood = null;   // { value, label } from the Fear & Greed index
+let news = [];     // [{ title, url, source, publishedAt }] for the selected coin
+let newsFor = null; // which coin id the news is for
 
 // ---------- Save and load ----------
 
@@ -127,6 +129,14 @@ const els = {
   moodBody: $("mood-body"),
   fngValue: $("fng-value"),
   fngLabel: $("fng-label"),
+  newsEmpty: $("news-empty"),
+  newsLoading: $("news-loading"),
+  newsError: $("news-error"),
+  newsErrorText: $("news-error-text"),
+  newsRetry: $("news-retry"),
+  newsList: $("news-list"),
+  headlineScore: $("headline-score"),
+  headlineLabel: $("headline-label"),
 };
 
 function show(el, on) {
@@ -252,6 +262,71 @@ async function fetchMood() {
   }
 }
 
+// ---------- News, through my own function ----------
+
+function setNewsView(which, message) {
+  show(els.newsEmpty, which === "empty");
+  show(els.newsLoading, which === "loading");
+  show(els.newsError, which === "error");
+  show(els.newsList, which === "list");
+  if (message) els.newsErrorText.textContent = message;
+}
+
+async function fetchNews() {
+  if (!selectedCoin) {
+    setNewsView("empty");
+    return;
+  }
+  const coin = selectedCoin;
+  setNewsView("loading");
+  try {
+    const response = await fetch(`/api/news?q=${encodeURIComponent(coin.name)}`);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || `The news function answered ${response.status}`);
+    }
+    news = data.articles;
+    newsFor = coin.id;
+    setNewsView("list");
+    render();
+  } catch (err) {
+    news = [];
+    newsFor = null;
+    setNewsView("error", err.message === "News is not set up yet." ? err.message : "News is not available right now.");
+    render();
+  }
+}
+
+// ---------- Headline sentiment: my own word lists ----------
+
+const POSITIVE = ["surge", "surges", "soar", "soars", "rally", "rallies", "record", "high", "highs",
+  "gain", "gains", "jump", "jumps", "climb", "climbs", "bullish", "approval", "approves", "approved",
+  "adoption", "launch", "launches", "upgrade", "inflow", "inflows", "breakout", "recover", "recovers",
+  "recovery", "boost", "boosts", "rise", "rises", "rising", "buy", "buys", "buying", "milestone"];
+const NEGATIVE = ["crash", "crashes", "plunge", "plunges", "drop", "drops", "fall", "falls", "slump",
+  "slumps", "hack", "hacked", "exploit", "ban", "bans", "banned", "lawsuit", "sues", "sued", "fraud",
+  "scam", "outflow", "outflows", "bearish", "fear", "selloff", "sell-off", "liquidation", "liquidations",
+  "dump", "dumps", "warning", "warns", "probe", "collapse", "collapses", "loss", "losses", "tumble",
+  "tumbles", "sink", "sinks", "slide", "slides", "crackdown", "risk", "risks"];
+
+// +1 if a headline has a positive word and no negative one, -1 the other way
+// round, 0 if it has both or neither.
+function scoreHeadline(title) {
+  const words = title.toLowerCase().split(/[^a-z-]+/);
+  const pos = words.some((w) => POSITIVE.includes(w));
+  const neg = words.some((w) => NEGATIVE.includes(w));
+  if (pos && !neg) return 1;
+  if (neg && !pos) return -1;
+  return 0;
+}
+
+function headlineMood() {
+  if (news.length === 0) return null;
+  const sum = news.reduce((total, a) => total + scoreHeadline(a.title), 0);
+  const label = sum >= 2 ? "positive" : sum <= -2 ? "negative" : "mixed";
+  return { sum, label };
+}
+
 // ---------- Trading ----------
 
 function readAmount(input, msgEl) {
@@ -342,6 +417,7 @@ function startOver() {
   save();
   render();
   fetchPrices();
+  fetchNews();
 }
 
 // ---------- Rendering ----------
@@ -463,7 +539,35 @@ function renderMood() {
 function moodWarning() {
   const parts = [];
   if (mood && mood.value <= 25) parts.push(`Market is in ${mood.label} (${mood.value}).`);
+  const h = headlineMood();
+  if (h && h.label === "negative") parts.push(`The news reads negative (${h.sum}).`);
   return parts.join(" ");
+}
+
+function renderNews() {
+  const h = headlineMood();
+  els.headlineScore.textContent = h ? (h.sum > 0 ? "+" + h.sum : String(h.sum)) : "—";
+  els.headlineLabel.textContent = h ? h.label : "";
+  els.headlineScore.className = "fig " + (h ? (h.label === "positive" ? "up" : h.label === "negative" ? "down" : "") : "");
+
+  if (!newsFor) return; // empty, loading or error view is already up
+  els.newsList.innerHTML = "";
+  if (news.length === 0) {
+    els.newsList.appendChild(el("li", "No recent news about this coin.", "muted"));
+    return;
+  }
+  for (const a of news) {
+    const li = document.createElement("li");
+    const link = el("a", a.title);
+    link.href = a.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    const score = scoreHeadline(a.title);
+    const mark = score > 0 ? " · +1" : score < 0 ? " · −1" : " · 0";
+    li.appendChild(link);
+    li.appendChild(el("span", `${a.source || "Unknown source"} · ${timeAgo(new Date(a.publishedAt))}${mark}`, "muted"));
+    els.newsList.appendChild(li);
+  }
 }
 
 function renderRules() {
@@ -482,6 +586,7 @@ function render() {
   renderPortfolio();
   renderTrades();
   renderMood();
+  renderNews();
   renderRules();
 }
 
@@ -584,6 +689,7 @@ els.rulesBox.addEventListener("toggle", () => {
 
 els.startOver.addEventListener("click", startOver);
 els.moodRetry.addEventListener("click", fetchMood);
+els.newsRetry.addEventListener("click", fetchNews);
 
 // ---------- Start ----------
 
@@ -591,6 +697,7 @@ load();
 render();
 fetchPrices();
 fetchMood();
+fetchNews();
 setInterval(fetchPrices, 60 * 1000);
 setInterval(() => {
   if (lastPriceAt && state.selected && prices[state.selected]) {
