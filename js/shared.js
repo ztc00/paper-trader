@@ -6,7 +6,7 @@ const STORAGE_KEY = "paper-trader-v1";
 const THEME_KEY = "paper-trader-theme";
 const COINGECKO = "https://api.coingecko.com/api/v3";
 
-const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500, riskPct: 1, stopPct: 5 };
+const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500, riskPct: 1, stopPct: 5, commission: 0, slippageBps: 5 };
 
 // Ten big US tickers for the stock tape. Finnhub has no "top 10" endpoint.
 const STOCK_TAPE = [
@@ -32,9 +32,11 @@ let state = {
   trades: [],    // { id, time, coinId, symbol, side, units, price, dollars, realized, via }
   rules: { ...DEFAULT_RULES },
   selected: null, // the id on the desk, like "bitcoin" or "stock:AAPL"
-  orders: [],     // { id, coinId, symbol, name, type, price, dollars, created }
+  orders: [],     // working orders: { id, coinId, symbol, name, side, type, qty, dollars, limitPrice, stopPrice, trailPct, tif, created, high, triggered }
+  orderHistory: [], // the last 200 orders that filled, were cancelled or expired, newest first
   equity: [],     // [[timeMs, portfolioValue], ...] for the performance chart
   market: "crypto", // which tab the search and tape show: "crypto" or "stocks"
+  watchlist: [],  // [{ id, name, symbol }] starred on the desk
 };
 
 let selectedCoin = null; // { id, name, symbol } for state.selected
@@ -48,7 +50,9 @@ function load() {
       state.positions = Array.isArray(saved.positions) ? saved.positions : [];
       state.trades = Array.isArray(saved.trades) ? saved.trades : [];
       state.rules = { ...DEFAULT_RULES, ...saved.rules };
-      state.orders = Array.isArray(saved.orders) ? saved.orders : [];
+      state.orders = (Array.isArray(saved.orders) ? saved.orders : []).map(upgradeOrder);
+      state.orderHistory = Array.isArray(saved.orderHistory) ? saved.orderHistory : [];
+      state.watchlist = Array.isArray(saved.watchlist) ? saved.watchlist : [];
       state.equity = Array.isArray(saved.equity) ? saved.equity : [];
       state.selected = saved.selected || null;
       state.market = saved.market === "stocks" ? "stocks" : "crypto";
@@ -57,6 +61,20 @@ function load() {
   } catch {
     // Broken or blocked storage: start from the defaults.
   }
+}
+
+// Orders from before version 4 had three types and a dollar amount. They
+// become the matching version 4 order so nothing pending is lost.
+function upgradeOrder(o) {
+  if (o.side) return o;
+  const map = { "limit-buy": ["Buy", "limit"], "stop-loss": ["Sell", "stop"], "take-profit": ["Sell", "limit"] };
+  const [side, type] = map[o.type] || ["Sell", "stop"];
+  return {
+    id: o.id, coinId: o.coinId, symbol: o.symbol, name: o.name, side, type,
+    qty: null, dollars: o.dollars || null, all: side === "Sell",
+    limitPrice: type === "limit" ? o.price : null, stopPrice: type === "stop" ? o.price : null,
+    trailPct: null, tif: "GTC", created: o.created, high: null, triggered: false,
+  };
 }
 
 function save() {
@@ -193,6 +211,132 @@ function renderStats(dl) {
     div.appendChild(el("dd", value, "fig " + (cls || "")));
     dl.appendChild(div);
   }
+}
+
+// ---------- Trading: fills, positions, the log ----------
+
+function positionFor(id) {
+  return state.positions.find((p) => p.id === id) || null;
+}
+
+function isToday(iso) {
+  return new Date(iso).toDateString() === new Date().toDateString();
+}
+
+// Why my rules block right now, or null if they do not.
+function blockReason() {
+  const today = state.trades.filter((t) => isToday(t.time));
+  if (today.length >= state.rules.maxTrades) {
+    return `${today.length} of ${state.rules.maxTrades} trades today. Back tomorrow.`;
+  }
+  const realized = today.reduce((sum, t) => sum + (t.realized || 0), 0);
+  if (realized <= -state.rules.lossLimit) {
+    return `Daily loss limit reached (${fmtSigned(realized)} realized). Back tomorrow.`;
+  }
+  return null;
+}
+
+// The bid and ask for an id. Coinbase's feed carries both for crypto; a
+// stock quote from Finnhub does not, so stocks get a 0.02% simulated spread,
+// and a coin with no feed 0.05%.
+function quoteFor(id) {
+  const q = prices[id];
+  if (!q) return null;
+  if (q.bid && q.ask && q.ask >= q.bid) return { bid: q.bid, ask: q.ask, last: q.price };
+  const half = (isStock(id) ? 0.0002 : 0.0005) / 2;
+  return { bid: q.price * (1 - half), ask: q.price * (1 + half), last: q.price };
+}
+
+// What a fill would cost right now. Market orders pay the spread and
+// slippage; a limit fills at its price or better.
+function fillPrice(id, side, kind, limitPrice) {
+  const q = quoteFor(id);
+  if (!q) return null;
+  const slip = (state.rules.slippageBps || 0) / 10000;
+  if (kind === "limit") {
+    return side === "Buy" ? Math.min(limitPrice, q.ask) : Math.max(limitPrice, q.bid);
+  }
+  return side === "Buy" ? q.ask * (1 + slip) : q.bid * (1 - slip);
+}
+
+function logTrade(coin, side, units, price, dollars, realized, via, fee) {
+  state.trades.unshift({
+    id: Date.now() + Math.random(),
+    time: new Date().toISOString(),
+    coinId: coin.id,
+    symbol: coin.symbol,
+    side,
+    units,
+    price,
+    dollars,
+    realized,
+    fee: fee || 0,
+    via: via || null, // "Limit", "Stop", "Stop-limit", "Trailing", "Close" or null for a market order from the ticket
+    note: "",
+  });
+}
+
+// Buy units at a price. Cash pays for the units and the fee. Buying more of
+// something I hold moves the average price.
+function buyUnits(coin, units, price, via) {
+  const fee = state.rules.commission || 0;
+  const dollars = units * price;
+  const pos = positionFor(coin.id);
+  if (pos) {
+    pos.avgPrice = (pos.avgPrice * pos.units + dollars) / (pos.units + units);
+    pos.units += units;
+  } else {
+    state.positions.push({ id: coin.id, name: coin.name, symbol: coin.symbol, units, avgPrice: price });
+  }
+  state.cash -= dollars + fee;
+  logTrade(coin, "Buy", units, price, dollars, null, via, fee);
+  recordEquity(true);
+}
+
+// Sell units at a price, never more than I hold. Realized P&L is against
+// the average price, after the fee.
+function sellUnits(coin, units, price, via) {
+  const pos = positionFor(coin.id);
+  if (!pos) return false;
+  const fee = state.rules.commission || 0;
+  units = Math.min(units, pos.units);
+  const got = units * price;
+  const realized = (price - pos.avgPrice) * units - fee;
+  pos.units -= units;
+  if (pos.units * price < 0.01) state.positions = state.positions.filter((p) => p !== pos);
+  state.cash += got - fee;
+  logTrade(coin, "Sell", units, price, got, realized, via, fee);
+  recordEquity(true);
+  return true;
+}
+
+// One point per minute at most, plus one on every trade. Capped at 1,000
+// points by dropping every other old point, so the curve never grows forever.
+function recordEquity(force) {
+  const now = Date.now();
+  const last = state.equity[state.equity.length - 1];
+  if (!force && last && now - last[0] < 60 * 1000) return;
+  state.equity.push([now, Math.round(portfolioTotal() * 100) / 100]);
+  if (state.equity.length > 1000) {
+    const old = state.equity.slice(0, 800).filter((_, i) => i % 2 === 0);
+    state.equity = old.concat(state.equity.slice(800));
+  }
+}
+
+// A working order leaves the list and goes to the history with its outcome.
+function closeOrder(order, status, fillPrice) {
+  state.orders = state.orders.filter((o) => o.id !== order.id);
+  state.orderHistory.unshift({ ...order, status, closed: new Date().toISOString(), fillPrice: fillPrice || null });
+  if (state.orderHistory.length > 200) state.orderHistory.length = 200;
+}
+
+// A small message at the bottom right, gone after four seconds.
+function toast(message, cls) {
+  const box = document.getElementById("toasts");
+  if (!box) return;
+  const t = el("div", message, "toast " + (cls || ""));
+  box.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
 }
 
 // ---------- Prices for any list of ids (the pages other than the desk) ----------

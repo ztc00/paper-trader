@@ -262,6 +262,17 @@ Every control is 6px rounded. Tables and sections are square.
   or down where it is money.
 - **AI read (v2):** a surface-colored box under the headlines, small text,
   the sentiment word in up or down.
+- **Order ticket (v4):** a segmented Buy / Sell control (the active side in
+  its signal color), two selects for type and time in force, a size well
+  with a small Units / Dollars segment in its label and four quiet preset
+  buttons, then the price wells the type needs. Under them an estimate box
+  on the surface color with four label-and-figure pairs. One full-width
+  button: green for a buy, red for a sell. The review is a box with a border
+  in the side's color, the order in one sentence and the money in another,
+  Confirm and Edit side by side.
+- **Toast (v4):** bottom right, surface color, a 3px left border in up, down
+  or warn, gone after four seconds. Never more than a line.
+- **Close (v4):** a quiet 26px button in the last column of a positions row.
 
 ## Do's and Don'ts
 

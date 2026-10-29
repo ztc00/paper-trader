@@ -35,16 +35,31 @@ const els = {
   coinPrice: $("coin-price"),
   coinChange: $("coin-change"),
   coinUpdated: $("coin-updated"),
-  buyForm: $("buy-form"),
-  buyAmount: $("buy-amount"),
-  buyBtn: $("buy-btn"),
-  buyMsg: $("buy-msg"),
-  sellForm: $("sell-form"),
-  sellAmount: $("sell-amount"),
-  sellBtn: $("sell-btn"),
-  sellAllBtn: $("sell-all-btn"),
-  sellMsg: $("sell-msg"),
+  starBtn: $("star-btn"),
+  bpLine: $("bp-line"),
+  ticket: $("ticket"),
+  sideBuy: $("side-buy"),
+  sideSell: $("side-sell"),
+  tType: $("t-type"),
+  tTif: $("t-tif"),
+  modeUnits: $("mode-units"),
+  modeDollars: $("mode-dollars"),
+  tQty: $("t-qty"),
+  tQtyMsg: $("t-qty-msg"),
+  presets: document.querySelectorAll(".presets button"),
+  sizer: $("sizer"),
+  fLimit: $("f-limit"), tLimit: $("t-limit"), tLimitMsg: $("t-limit-msg"),
+  fStop: $("f-stop"), tStop: $("t-stop"), tStopMsg: $("t-stop-msg"),
+  fTrail: $("f-trail"), tTrail: $("t-trail"), tTrailMsg: $("t-trail-msg"),
+  estPriceLabel: $("est-price-label"), estPrice: $("est-price"),
+  estTotalLabel: $("est-total-label"), estTotal: $("est-total"),
+  estFee: $("est-fee"), estBp: $("est-bp"),
   tradeNote: $("trade-note"),
+  tReview: $("t-review"),
+  review: $("review"), reviewText: $("review-text"), tConfirm: $("t-confirm"), tEdit: $("t-edit"),
+  ordersEmpty: $("orders-empty"),
+  ordersList: $("orders-list"),
+  historyCount: $("history-count"), historyEmpty: $("history-empty"), historyTable: $("history-table"), historyBody: $("history-body"),
   cash: $("cash"),
   positionsEmpty: $("positions-empty"),
   positionsTable: $("positions-table"),
@@ -60,6 +75,10 @@ const els = {
   ruleCash: $("rule-cash"),
   ruleTrades: $("rule-trades"),
   ruleLoss: $("rule-loss"),
+  ruleRisk: $("rule-risk"),
+  ruleStop: $("rule-stop"),
+  ruleFee: $("rule-fee"),
+  ruleSlip: $("rule-slip"),
   startOver: $("start-over"),
   moodLoading: $("mood-loading"),
   moodError: $("mood-error"),
@@ -68,6 +87,7 @@ const els = {
   moodBody: $("mood-body"),
   fngValue: $("fng-value"),
   fngLabel: $("fng-label"),
+  moodSource: $("mood-source"),
   newsEmpty: $("news-empty"),
   newsLoading: $("news-loading"),
   newsError: $("news-error"),
@@ -81,31 +101,27 @@ const els = {
   briefSentiment: $("brief-sentiment"),
   briefCompare: $("brief-compare"),
   tape: $("tape"),
+  tapeTabs: document.querySelectorAll(".tape-tabs .seg-btn"),
   chart: $("chart"),
   chartStatus: $("chart-status"),
   ranges: document.querySelectorAll(".range"),
-  sizer: $("sizer"),
-  orderForm: $("order-form"),
-  orderType: $("order-type"),
-  orderPrice: $("order-price"),
-  orderDollars: $("order-dollars"),
-  orderBtn: $("order-btn"),
-  orderMsg: $("order-msg"),
-  ordersList: $("orders-list"),
   equity: $("equity"),
   stats: $("stats"),
   exportBtn: $("export-btn"),
-  ruleRisk: $("rule-risk"),
-  ruleStop: $("rule-stop"),
   marketBtns: document.querySelectorAll(".market-btn"),
-  moodSource: $("mood-source"),
 };
+
+// The ticket's own state. Nothing here is saved.
+const ticket = { side: "Buy", mode: "units", reviewing: false };
+let tapeView = "top"; // "top" or "watch"
 
 // ---------- Fetching prices ----------
 
 // Everything on screen that needs a price: the selected one and every position.
 function wantedIds() {
   const ids = new Set(state.positions.map((p) => p.id));
+  for (const o of state.orders) ids.add(o.coinId);
+  for (const w of state.watchlist) ids.add(w.id);
   if (state.selected) ids.add(state.selected);
   return [...ids];
 }
@@ -269,6 +285,7 @@ async function fetchChart() {
 function coinsBySymbol() {
   const map = {};
   for (const c of tape) if (!isStock(c.id)) map[c.symbol] = c.id;
+  for (const w of state.watchlist) if (!isStock(w.id)) map[w.symbol] = w.id;
   for (const p of state.positions) if (!isStock(p.id)) map[p.symbol] = p.id;
   if (selectedCoin && !isStock(selectedCoin.id)) map[selectedCoin.symbol] = selectedCoin.id;
   return map;
@@ -281,11 +298,12 @@ function watchLive() {
 // A live tick from Coinbase. Updates the price in memory, then redraws the
 // parts that show it, at most five times a second.
 let tickTimer = null;
-function applyTick(symbol, price) {
+function applyTick(symbol, price, bid, ask) {
   const id = coinsBySymbol()[symbol];
   if (!id || !prices[id]) return;
   const before = prices[id].price;
   prices[id].price = price;
+  if (bid > 0 && ask > 0) { prices[id].bid = bid; prices[id].ask = ask; }
   prices[id].liveBefore = before;
   liveAt = new Date();
   if (tickTimer) return;
@@ -297,6 +315,7 @@ function applyTick(symbol, price) {
     renderPortfolio();
     renderTape();
     renderChart();
+    renderTicket();
     checkOrders();
     if (sel && was != null && was !== sel.price) flashPrice(was);
     if (sel) sel.liveBefore = sel.price;
@@ -464,67 +483,73 @@ function headlineMood() {
 
 // ---------- Trading ----------
 
-// Pending orders, checked on every price update, live tick or poll.
+const ORDER_NAMES = { market: "Market", limit: "Limit", stop: "Stop", "stop-limit": "Stop-limit", trailing: "Trailing stop" };
+
+// Working orders, checked on every price update, live tick or poll. Each
+// one either waits, fills at the price it earned, or leaves with a reason.
 function checkOrders() {
-  let filled = false;
+  let changed = false;
   for (const o of state.orders.slice()) {
-    const q = prices[o.coinId];
+    const q = quoteFor(o.coinId);
     if (!q) continue;
     const coin = { id: o.coinId, name: o.name, symbol: o.symbol };
-    const pos = positionFor(o.coinId);
-    if (blockReason()) continue; // my rules hold the order until tomorrow
-    if (o.type === "limit-buy" && q.price <= o.price) {
-      if (o.dollars > state.cash) continue; // not enough cash: it waits
-      buy(o.dollars, coin, "Limit");
-    } else if (o.type === "stop-loss" && pos && q.price <= o.price) {
-      sell(pos.units * q.price, coin, "Stop-loss");
-    } else if (o.type === "take-profit" && pos && q.price >= o.price) {
-      sell(pos.units * q.price, coin, "Take-profit");
-    } else {
+    const price = q.last;
+
+    if (o.tif === "Day" && !isToday(o.created)) {
+      closeOrder(o, "expired");
+      toast(`${ORDER_NAMES[o.type]} ${o.side.toLowerCase()} ${o.symbol} expired at the end of its day.`, "warn");
+      changed = true;
       continue;
     }
-    state.orders = state.orders.filter((x) => x.id !== o.id);
-    filled = true;
+    if (o.side === "Sell" && !positionFor(o.coinId)) {
+      closeOrder(o, "cancelled");
+      toast(`${ORDER_NAMES[o.type]} sell ${o.symbol} cancelled: nothing left to sell.`, "warn");
+      changed = true;
+      continue;
+    }
+
+    // Trailing stops follow the high since they were placed.
+    if (o.type === "trailing") {
+      o.high = Math.max(o.high || price, price);
+      if (price > o.high * (1 - o.trailPct / 100)) { changed = changed || false; continue; }
+    } else if (o.type === "stop" || (o.type === "stop-limit" && !o.triggered)) {
+      const hit = o.side === "Sell" ? price <= o.stopPrice : price >= o.stopPrice;
+      if (!hit) continue;
+      if (o.type === "stop-limit") { o.triggered = true; changed = true; }
+    }
+    if (o.type === "limit" || (o.type === "stop-limit" && o.triggered)) {
+      const can = o.side === "Buy" ? q.ask <= o.limitPrice : q.bid >= o.limitPrice;
+      if (!can) continue;
+    }
+
+    if (blockReason()) continue; // my rules hold the order until tomorrow
+
+    const kind = o.type === "limit" || o.type === "stop-limit" ? "limit" : "market";
+    const fill = fillPrice(o.coinId, o.side, kind, o.limitPrice);
+    const units = o.qty != null ? o.qty : o.all ? (positionFor(o.coinId) || { units: 0 }).units : o.dollars / fill;
+    if (o.side === "Buy") {
+      if (units * fill + (state.rules.commission || 0) > state.cash + 0.005) continue; // not enough cash: it waits
+      buyUnits(coin, units, fill, ORDER_NAMES[o.type]);
+    } else {
+      sellUnits(coin, units, fill, ORDER_NAMES[o.type]);
+    }
+    closeOrder(o, "filled", fill);
+    toast(`${ORDER_NAMES[o.type]} ${o.side.toLowerCase()} filled: ${fmtUnits(units)} ${o.symbol} at ${fmtMoney(fill)}.`, o.side === "Buy" ? "" : "down");
+    changed = true;
   }
-  if (filled) {
+  if (changed) {
     save();
     render();
+    watchLive();
   }
-}
-
-function placeOrder(type, price, dollars) {
-  state.orders.push({
-    id: Date.now(),
-    coinId: selectedCoin.id,
-    symbol: selectedCoin.symbol,
-    name: selectedCoin.name,
-    type,
-    price,
-    dollars: type === "limit-buy" ? dollars : null,
-    created: new Date().toISOString(),
-  });
-  save();
-  render();
 }
 
 function cancelOrder(id) {
-  state.orders = state.orders.filter((o) => o.id !== id);
+  const o = state.orders.find((x) => x.id === id);
+  if (!o) return;
+  closeOrder(o, "cancelled");
   save();
   render();
-}
-
-// One point per minute at most, plus one on every trade. Capped at 1,000
-// points by dropping every other old point, so the curve never grows forever.
-function recordEquity(force) {
-  const now = Date.now();
-  const last = state.equity[state.equity.length - 1];
-  if (!force && last && now - last[0] < 60 * 1000) return;
-  state.equity.push([now, Math.round(portfolioTotal() * 100) / 100]);
-  if (state.equity.length > 1000) {
-    const old = state.equity.slice(0, 800).filter((_, i) => i % 2 === 0);
-    state.equity = old.concat(state.equity.slice(800));
-  }
-  save();
 }
 
 // How big a position my rules suggest: risk a share of cash, with the stop a
@@ -535,11 +560,11 @@ function suggestedSize() {
   return Math.min(size, state.cash);
 }
 
-function readAmount(input, msgEl) {
+function readNumber(input, msgEl, message) {
   const raw = input.value.trim();
   const n = Number(raw);
   if (raw === "" || !Number.isFinite(n) || n <= 0) {
-    msgEl.textContent = "Enter a dollar amount above 0, like 250.";
+    msgEl.textContent = message;
     input.classList.add("invalid");
     return null;
   }
@@ -548,76 +573,112 @@ function readAmount(input, msgEl) {
   return n;
 }
 
-function positionFor(id) {
-  return state.positions.find((p) => p.id === id) || null;
-}
+// What the ticket says right now, as an order, or null with the messages
+// shown under the fields. `quiet` only computes, for the estimate.
+function readTicket(quiet) {
+  const id = state.selected;
+  const q = quoteFor(id);
+  if (!id || !q) return null;
+  const type = els.tType.value;
+  const side = ticket.side;
+  const pos = positionFor(id);
+  const msg = quiet ? { textContent: "" } : null;
+  const say = (input, m, text) => { if (!quiet) { m.textContent = text; input.classList.add("invalid"); } };
+  const clear = (input, m) => { if (!quiet) { m.textContent = ""; input.classList.remove("invalid"); } };
 
-function isToday(iso) {
-  return new Date(iso).toDateString() === new Date().toDateString();
-}
-
-// Why the rules block right now, or null if they do not.
-function blockReason() {
-  const today = state.trades.filter((t) => isToday(t.time));
-  if (today.length >= state.rules.maxTrades) {
-    return `${today.length} of ${state.rules.maxTrades} trades today. Back tomorrow.`;
+  const sizeRaw = Number(els.tQty.value.trim());
+  if (els.tQty.value.trim() === "" || !Number.isFinite(sizeRaw) || sizeRaw <= 0) {
+    say(els.tQty, els.tQtyMsg, "Enter a size above 0.");
+    return null;
   }
-  const realized = today.reduce((sum, t) => sum + (t.realized || 0), 0);
-  if (realized <= -state.rules.lossLimit) {
-    return `Daily loss limit reached (${fmtSigned(realized)} realized). Back tomorrow.`;
+  clear(els.tQty, els.tQtyMsg);
+
+  let limitPrice = null, stopPrice = null, trailPct = null;
+  if (type === "limit" || type === "stop-limit") {
+    limitPrice = Number(els.tLimit.value.trim());
+    if (!(limitPrice > 0)) { say(els.tLimit, els.tLimitMsg, "Enter a limit price above 0."); return null; }
+    if (type === "limit" && side === "Buy" && limitPrice > q.ask) { say(els.tLimit, els.tLimitMsg, `A limit buy goes at or below the ask, ${fmtMoney(q.ask)}. Use Market to buy now.`); return null; }
+    if (type === "limit" && side === "Sell" && limitPrice < q.bid) { say(els.tLimit, els.tLimitMsg, `A limit sell goes at or above the bid, ${fmtMoney(q.bid)}. Use Market to sell now.`); return null; }
+    clear(els.tLimit, els.tLimitMsg);
   }
-  return null;
+  if (type === "stop" || type === "stop-limit") {
+    stopPrice = Number(els.tStop.value.trim());
+    if (!(stopPrice > 0)) { say(els.tStop, els.tStopMsg, "Enter a stop price above 0."); return null; }
+    if (side === "Sell" && stopPrice >= q.last) { say(els.tStop, els.tStopMsg, `A sell stop goes below the price now, ${fmtMoney(q.last)}.`); return null; }
+    if (side === "Buy" && stopPrice <= q.last) { say(els.tStop, els.tStopMsg, `A buy stop goes above the price now, ${fmtMoney(q.last)}.`); return null; }
+    clear(els.tStop, els.tStopMsg);
+  }
+  if (type === "trailing") {
+    trailPct = Number(els.tTrail.value.trim());
+    if (!(trailPct >= 0.1 && trailPct <= 50)) { say(els.tTrail, els.tTrailMsg, "Trail must be between 0.1% and 50%."); return null; }
+    clear(els.tTrail, els.tTrailMsg);
+  }
+
+  // The price a market order would get now; a limit's own price otherwise.
+  const kind = type === "limit" ? "limit" : "market";
+  const ref = type === "limit" ? fillPrice(id, side, "limit", limitPrice)
+    : type === "stop-limit" ? limitPrice
+    : type === "stop" ? stopPrice
+    : fillPrice(id, side, "market");
+  const qty = ticket.mode === "units" ? sizeRaw : sizeRaw / ref;
+  const fee = state.rules.commission || 0;
+  const total = qty * ref;
+
+  if (side === "Buy" && total + fee > state.cash + 0.005) {
+    say(els.tQty, els.tQtyMsg, `You have ${fmtMoney(state.cash)} in cash${fee ? `, and the fee is ${fmtMoney(fee)}` : ""}.`);
+    return null;
+  }
+  if (side === "Sell") {
+    if (!pos) { say(els.tQty, els.tQtyMsg, `You do not hold any ${selectedCoin.symbol}.`); return null; }
+    if (qty > pos.units * 1.0001) { say(els.tQty, els.tQtyMsg, `You hold ${fmtUnits(pos.units)} ${pos.symbol}.`); return null; }
+  }
+  return { id, side, type, kind, qty: Math.min(qty, pos && side === "Sell" ? pos.units : qty), ref, total, fee, limitPrice, stopPrice, trailPct, tif: els.tTif.value };
 }
 
-function logTrade(coin, side, units, price, dollars, realized, via) {
-  state.trades.unshift({
-    id: Date.now() + Math.random(),
-    time: new Date().toISOString(),
-    coinId: coin.id,
-    symbol: coin.symbol,
-    side,
-    units,
-    price,
-    dollars,
-    realized,
-    via: via || null, // "Limit", "Stop-loss" or "Take-profit" when an order filled it
-  });
-}
-
-function buy(dollars, coin = selectedCoin, via) {
-  const price = prices[coin.id].price;
-  const units = dollars / price;
-  const pos = positionFor(coin.id);
-  if (pos) {
-    // New average price: total paid so far plus this buy, over total units.
-    pos.avgPrice = (pos.avgPrice * pos.units + dollars) / (pos.units + units);
-    pos.units += units;
+// Confirm: a market order fills now, anything else goes to Working orders.
+function placeTicket(t) {
+  const coin = selectedCoin;
+  if (t.type === "market") {
+    const fill = fillPrice(t.id, t.side, "market");
+    if (t.side === "Buy") buyUnits(coin, t.qty, fill, null);
+    else sellUnits(coin, t.qty, fill, null);
+    toast(`${t.side === "Buy" ? "Bought" : "Sold"} ${fmtUnits(t.qty)} ${coin.symbol} at ${fmtMoney(fill)}.`, t.side === "Buy" ? "" : "down");
   } else {
-    state.positions.push({ id: coin.id, name: coin.name, symbol: coin.symbol, units, avgPrice: price });
+    state.orders.push({
+      id: Date.now(), coinId: coin.id, symbol: coin.symbol, name: coin.name,
+      side: t.side, type: t.type, qty: t.qty, dollars: null, all: false,
+      limitPrice: t.limitPrice, stopPrice: t.stopPrice, trailPct: t.trailPct,
+      tif: t.tif, created: new Date().toISOString(), high: quoteFor(coin.id).last, triggered: false,
+    });
+    toast(`${ORDER_NAMES[t.type]} ${t.side.toLowerCase()} placed: ${fmtUnits(t.qty)} ${coin.symbol}.`);
   }
-  state.cash -= dollars;
-  logTrade(coin, "Buy", units, price, dollars, null, via);
-  recordEquity(true);
   save();
+  ticket.reviewing = false;
+  els.tQty.value = "";
   render();
   watchLive();
+  checkOrders();
 }
 
-function sell(dollars, coin = selectedCoin, via) {
-  const price = prices[coin.id].price;
-  const pos = positionFor(coin.id);
-  const units = Math.min(dollars / price, pos.units);
-  const got = units * price;
-  const realized = (price - pos.avgPrice) * units;
-  pos.units -= units;
-  if (pos.units * price < 0.01) {
-    state.positions = state.positions.filter((p) => p !== pos);
-  }
-  state.cash += got;
-  logTrade(coin, "Sell", units, price, got, realized, via);
-  recordEquity(true);
+// Close: sell the whole position at the market, from the positions table.
+function closePosition(id) {
+  const pos = positionFor(id);
+  if (!pos || blockReason()) return;
+  const fill = fillPrice(id, "Sell", "market");
+  sellUnits({ id: pos.id, name: pos.name, symbol: pos.symbol }, pos.units, fill, "Close");
+  toast(`Closed ${pos.symbol} at ${fmtMoney(fill)}.`, "down");
   save();
   render();
+}
+
+function toggleWatch() {
+  if (!selectedCoin) return;
+  const i = state.watchlist.findIndex((w) => w.id === selectedCoin.id);
+  if (i >= 0) state.watchlist.splice(i, 1);
+  else state.watchlist.push({ id: selectedCoin.id, name: selectedCoin.name, symbol: selectedCoin.symbol });
+  save();
+  render();
+  fetchPrices();
   watchLive();
 }
 
@@ -626,6 +687,7 @@ function startOver() {
   state.positions = [];
   state.trades = [];
   state.orders = [];
+  state.orderHistory = [];
   state.equity = [[Date.now(), state.rules.startingCash]];
   save();
   render();
@@ -663,6 +725,9 @@ function renderCoin() {
   setCoinView("body");
   els.coinName.textContent = selectedCoin.name;
   els.coinSymbol.textContent = selectedCoin.symbol;
+  const watched = state.watchlist.some((w) => w.id === state.selected);
+  els.starBtn.textContent = watched ? "★ Watching" : "☆ Watch";
+  els.starBtn.setAttribute("aria-pressed", String(watched));
   els.coinPrice.textContent = fmtMoney(p.price);
   els.coinChange.textContent = isStock(state.selected)
     ? `Today ${fmtPct(p.change24h)} · prev close ${fmtMoney(p.prevClose)}`
@@ -686,9 +751,15 @@ function renderUpdated() {
 }
 
 function renderTape() {
-  if (tape.length === 0) return;
+  for (const b of els.tapeTabs) b.classList.toggle("active", b.dataset.tape === tapeView);
+  const items = tapeView === "watch" ? state.watchlist.map((w) => ({ ...w, spark: [] })) : tape;
+  if (tapeView === "watch" && items.length === 0) {
+    els.tape.replaceChildren(el("li", "Nothing starred yet. Pick an asset and press ☆ Watch.", "muted"));
+    return;
+  }
+  if (items.length === 0) return;
   els.tape.replaceChildren();
-  for (const c of tape) {
+  for (const c of items) {
     const q = prices[c.id];
     const li = document.createElement("li");
     const btn = document.createElement("button");
@@ -740,69 +811,6 @@ function renderChart() {
   });
 }
 
-function renderTrade() {
-  const ready = Boolean(state.selected && prices[state.selected]);
-  const reason = blockReason();
-  const pos = state.selected ? positionFor(state.selected) : null;
-  els.buyAmount.disabled = !ready || Boolean(reason);
-  els.buyBtn.disabled = !ready || Boolean(reason);
-  els.sellAmount.disabled = !ready || Boolean(reason) || !pos;
-  els.sellBtn.disabled = !ready || Boolean(reason) || !pos;
-  els.sellAllBtn.disabled = !ready || Boolean(reason) || !pos;
-  // Orders need a coin and a price, and a position for the sell types.
-  const orderable = ready && !reason;
-  els.orderType.disabled = !orderable;
-  els.orderPrice.disabled = !orderable;
-  els.orderDollars.disabled = !orderable || els.orderType.value !== "limit-buy";
-  els.orderBtn.disabled = !orderable;
-  show(els.orderDollars, els.orderType.value === "limit-buy");
-  renderSizer(ready);
-  renderOrders();
-  if (reason) {
-    els.tradeNote.textContent = reason;
-    els.tradeNote.className = "note block";
-  } else {
-    const warning = ready ? moodWarning() : "";
-    els.tradeNote.textContent = warning;
-    els.tradeNote.className = warning ? "note warn" : "note";
-  }
-}
-
-function renderSizer(ready) {
-  els.sizer.replaceChildren();
-  if (!ready) return;
-  const size = suggestedSize();
-  els.sizer.appendChild(document.createTextNode(`· by my rules ${fmtMoney(size)}`));
-  const use = el("button", "Use", "quiet");
-  use.type = "button";
-  use.title = `${state.rules.riskPct}% of cash at risk with a ${state.rules.stopPct}% stop`;
-  use.addEventListener("click", () => {
-    els.buyAmount.value = size.toFixed(2);
-    els.buyMsg.textContent = "";
-    els.buyAmount.classList.remove("invalid");
-    els.buyAmount.focus();
-  });
-  els.sizer.appendChild(use);
-}
-
-const ORDER_WORDS = { "limit-buy": "Buy", "stop-loss": "Sell all if it falls to", "take-profit": "Sell all if it rises to" };
-
-function renderOrders() {
-  els.ordersList.replaceChildren();
-  for (const o of state.orders) {
-    const li = document.createElement("li");
-    const text = o.type === "limit-buy"
-      ? `Buy ${fmtMoney(o.dollars)} of ${o.symbol} when it drops to ${fmtMoney(o.price)}`
-      : `${ORDER_WORDS[o.type]} ${fmtMoney(o.price)} · ${o.symbol}`;
-    li.appendChild(el("span", text));
-    const cancel = el("button", "Cancel", "cancel");
-    cancel.type = "button";
-    cancel.dataset.id = o.id;
-    li.appendChild(cancel);
-    els.ordersList.appendChild(li);
-  }
-}
-
 function renderPerformance() {
   renderStats(els.stats);
   const points = state.equity.slice();
@@ -816,54 +824,6 @@ function renderPerformance() {
     fmtTime: (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
   });
-}
-
-function renderPortfolio() {
-  els.cash.textContent = fmtMoney(state.cash);
-  const any = state.positions.length > 0;
-  show(els.positionsEmpty, !any);
-  show(els.positionsTable, any);
-  els.positionsBody.innerHTML = "";
-  let value = 0;
-  let pnl = 0;
-  for (const p of state.positions) {
-    const q = prices[p.id];
-    const price = q ? q.price : p.avgPrice;
-    const v = p.units * price;
-    const gain = v - p.units * p.avgPrice;
-    const pct = (gain / (p.units * p.avgPrice)) * 100;
-    value += v;
-    pnl += gain;
-    els.positionsBody.appendChild(row([
-      p.symbol, fmtUnits(p.units), fmtMoney(p.avgPrice), q ? fmtMoney(price) : "—", fmtMoney(v),
-      [`${fmtSigned(gain)} (${fmtPct(pct)})`, upDown(gain)],
-    ]));
-  }
-  els.positionsValue.textContent = fmtMoney(value);
-  els.positionsPnl.textContent = fmtSigned(pnl);
-  els.positionsPnl.className = "fig " + upDown(pnl);
-
-  // Header: everything I own plus cash, against what I started with.
-  const total = state.cash + value;
-  const since = total - state.rules.startingCash;
-  const sincePct = (since / state.rules.startingCash) * 100;
-  els.total.textContent = fmtMoney(total);
-  els.pnl.textContent = `${fmtSigned(since)} (${fmtPct(sincePct)})`;
-  els.pnl.className = "pnl fig " + upDown(since);
-}
-
-function renderTrades() {
-  const any = state.trades.length > 0;
-  show(els.tradesEmpty, !any);
-  show(els.tradesTable, any);
-  els.tradesBody.innerHTML = "";
-  for (const t of state.trades) {
-    els.tradesBody.appendChild(row([
-      fmtWhen(t.time), [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
-      t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
-    ]));
-  }
-  show(els.exportBtn, any);
 }
 
 function tradesCsv() {
@@ -886,6 +846,196 @@ function stockMood() {
   const c = spy.change24h;
   const label = c <= -1.5 ? "Selling off" : c < -0.5 ? "Down" : c > 1.5 ? "Rallying" : c > 0.5 ? "Up" : "Flat";
   return { value: fmtPct(c), label, bad: c <= -1.5, good: c >= 1.5 };
+}
+
+function orderWords(o) {
+  const at = o.type === "limit" ? `at ${fmtMoney(o.limitPrice)}`
+    : o.type === "stop" ? `stop ${fmtMoney(o.stopPrice)}`
+    : o.type === "stop-limit" ? `stop ${fmtMoney(o.stopPrice)}, limit ${fmtMoney(o.limitPrice)}${o.triggered ? ", triggered" : ""}`
+    : o.type === "trailing" ? `trailing ${o.trailPct}% (stop now ${fmtMoney((o.high || 0) * (1 - o.trailPct / 100))})`
+    : "at market";
+  const size = o.qty != null ? fmtUnits(o.qty) : o.all ? "all" : fmtMoney(o.dollars) + " of";
+  return `${o.side} ${size} ${o.symbol} ${at} · ${o.tif}`;
+}
+
+// The ticket: which fields show, what the fill would be, whether it can go.
+function renderTicket() {
+  const q = state.selected ? quoteFor(state.selected) : null;
+  const ready = Boolean(q);
+  const reason = blockReason();
+  const type = els.tType.value;
+  els.bpLine.textContent = `Buying power ${fmtMoney(state.cash)}`;
+  els.sideBuy.classList.toggle("active", ticket.side === "Buy");
+  els.sideSell.classList.toggle("active", ticket.side === "Sell");
+  els.modeUnits.classList.toggle("active", ticket.mode === "units");
+  els.modeDollars.classList.toggle("active", ticket.mode === "dollars");
+  els.tQty.placeholder = ticket.mode === "units" ? "0.5" : "250";
+  show(els.fLimit, type === "limit" || type === "stop-limit");
+  show(els.fStop, type === "stop" || type === "stop-limit");
+  show(els.fTrail, type === "trailing");
+  els.sideSell.disabled = ready && !positionFor(state.selected) && ticket.side !== "Sell";
+  els.tReview.textContent = `Review ${ticket.side.toLowerCase()} order`;
+  els.tReview.classList.toggle("sell-side", ticket.side === "Sell");
+  els.tConfirm.classList.toggle("sell-side", ticket.side === "Sell");
+  els.review.classList.toggle("sell-side", ticket.side === "Sell");
+  show(els.review, ticket.reviewing);
+  els.ticket.classList.toggle("frozen", ticket.reviewing);
+  for (const node of els.ticket.querySelectorAll("input, select, button")) {
+    node.disabled = !ready || Boolean(reason) || ticket.reviewing;
+  }
+  if (ready && !reason && !ticket.reviewing) {
+    els.sideSell.disabled = !positionFor(state.selected);
+  }
+  if (!ready) {
+    els.tradeNote.textContent = "";
+    els.tradeNote.className = "note";
+    return;
+  }
+  // Prefill prices the first time a field opens.
+  if (els.fLimit.hidden === false && !els.tLimit.value) els.tLimit.value = q.last.toFixed(q.last < 10 ? 4 : 2);
+  if (els.fStop.hidden === false && !els.tStop.value) {
+    els.tStop.value = (ticket.side === "Sell" ? q.last * 0.97 : q.last * 1.03).toFixed(q.last < 10 ? 4 : 2);
+    // A stop-limit's limit starts at its stop, the usual default.
+    if (type === "stop-limit") els.tLimit.value = els.tStop.value;
+  }
+  if (els.fTrail.hidden === false && !els.tTrail.value) els.tTrail.value = state.rules.stopPct;
+
+  const t = readTicket(true);
+  if (t) {
+    // A valid ticket clears any message left from an earlier attempt.
+    for (const [input, msg] of [[els.tQty, els.tQtyMsg], [els.tLimit, els.tLimitMsg], [els.tStop, els.tStopMsg], [els.tTrail, els.tTrailMsg]]) {
+      msg.textContent = "";
+      input.classList.remove("invalid");
+    }
+  }
+  els.estPriceLabel.textContent = type === "market" ? "Est. fill" : type === "stop" ? "Fills near" : "Fill at";
+  els.estTotalLabel.textContent = ticket.side === "Buy" ? "Est. cost" : "Est. proceeds";
+  els.estPrice.textContent = t ? fmtMoney(t.ref) : type === "market" ? fmtMoney(fillPrice(state.selected, ticket.side, "market")) : "—";
+  els.estTotal.textContent = t ? fmtMoney(t.total) : "—";
+  els.estFee.textContent = fmtMoney(state.rules.commission || 0);
+  const after = t ? (ticket.side === "Buy" ? state.cash - t.total - t.fee : state.cash + t.total - t.fee) : state.cash;
+  els.estBp.textContent = fmtMoney(after);
+  els.estBp.className = "fig " + (t && after < 0 ? "down" : "");
+
+  renderSizer();
+  if (reason) {
+    els.tradeNote.textContent = reason;
+    els.tradeNote.className = "note block";
+  } else {
+    const warning = moodWarning();
+    els.tradeNote.textContent = warning;
+    els.tradeNote.className = warning ? "note warn" : "note";
+  }
+}
+
+function renderSizer() {
+  els.sizer.replaceChildren();
+  if (!state.selected || !prices[state.selected] || ticket.side !== "Buy") return;
+  const size = suggestedSize();
+  els.sizer.appendChild(document.createTextNode(`By my rules: ${fmtMoney(size)} (${state.rules.riskPct}% of cash at risk, ${state.rules.stopPct}% stop) `));
+  const use = el("button", "Use", "quiet small");
+  use.type = "button";
+  use.addEventListener("click", () => {
+    ticket.mode = "dollars";
+    els.tQty.value = size.toFixed(2);
+    renderTicket();
+    els.tQty.focus();
+  });
+  els.sizer.appendChild(use);
+}
+
+function renderOrders() {
+  show(els.ordersEmpty, state.orders.length === 0);
+  els.ordersList.replaceChildren();
+  for (const o of state.orders) {
+    const li = document.createElement("li");
+    li.appendChild(el("span", orderWords(o)));
+    const cancel = el("button", "Cancel", "cancel");
+    cancel.type = "button";
+    cancel.dataset.id = o.id;
+    li.appendChild(cancel);
+    els.ordersList.appendChild(li);
+  }
+  const h = state.orderHistory;
+  els.historyCount.textContent = h.length ? String(h.length) : "";
+  show(els.historyEmpty, h.length === 0);
+  show(els.historyTable, h.length > 0);
+  els.historyBody.replaceChildren();
+  for (const o of h.slice(0, 30)) {
+    const size = o.qty != null ? fmtUnits(o.qty) : o.all ? "all" : fmtMoney(o.dollars);
+    els.historyBody.appendChild(row([
+      fmtWhen(o.closed), [`${o.side} ${ORDER_NAMES[o.type]}`, o.side === "Buy" ? "up" : "down"], o.symbol, size,
+      o.fillPrice ? fmtMoney(o.fillPrice) : "—", [o.status, o.status === "filled" ? "" : "muted"],
+    ]));
+  }
+}
+
+function renderPortfolio() {
+  els.cash.textContent = fmtMoney(state.cash);
+  const any = state.positions.length > 0;
+  show(els.positionsEmpty, !any);
+  show(els.positionsTable, any);
+  els.positionsBody.replaceChildren();
+  let value = 0;
+  let pnl = 0;
+  for (const p of state.positions) {
+    const q = prices[p.id];
+    const price = q ? q.price : p.avgPrice;
+    const v = p.units * price;
+    const gain = v - p.units * p.avgPrice;
+    const pct = (gain / (p.units * p.avgPrice)) * 100;
+    value += v;
+    pnl += gain;
+    const tr = row([
+      p.symbol, fmtUnits(p.units), fmtMoney(p.avgPrice), q ? fmtMoney(price) : "—", fmtMoney(v),
+      [`${fmtSigned(gain)} (${fmtPct(pct)})`, upDown(gain)], "",
+    ]);
+    const close = el("button", "Close", "quiet close-btn");
+    close.type = "button";
+    close.dataset.id = p.id;
+    close.disabled = !q || Boolean(blockReason());
+    tr.lastChild.appendChild(close);
+    els.positionsBody.appendChild(tr);
+  }
+  els.positionsValue.textContent = fmtMoney(value);
+  els.positionsPnl.textContent = fmtSigned(pnl);
+  els.positionsPnl.className = "fig " + upDown(pnl);
+
+  // Header: everything I own plus cash, against what I started with.
+  const total = state.cash + value;
+  const since = total - state.rules.startingCash;
+  const sincePct = (since / state.rules.startingCash) * 100;
+  els.total.textContent = fmtMoney(total);
+  els.pnl.textContent = `${fmtSigned(since)} (${fmtPct(sincePct)})`;
+  els.pnl.className = "pnl fig " + upDown(since);
+}
+
+function renderTrades() {
+  const any = state.trades.length > 0;
+  show(els.tradesEmpty, !any);
+  show(els.tradesTable, any);
+  els.tradesBody.replaceChildren();
+  for (const t of state.trades.slice(0, 50)) {
+    els.tradesBody.appendChild(row([
+      fmtWhen(t.time), [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
+      t.fee ? fmtMoney(t.fee) : "", t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
+    ]));
+  }
+  show(els.exportBtn, any);
+}
+
+function renderRules() {
+  const r = state.rules;
+  els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit, ${r.riskPct}% risk with a ${r.stopPct}% stop, ${r.commission ? fmtMoney(r.commission) + " commission" : "no commission"}, ${r.slippageBps} bps slippage.`;
+  if (!els.rulesBox.open) {
+    els.ruleCash.value = r.startingCash;
+    els.ruleTrades.value = r.maxTrades;
+    els.ruleLoss.value = r.lossLimit;
+    els.ruleRisk.value = r.riskPct;
+    els.ruleStop.value = r.stopPct;
+    els.ruleFee.value = r.commission;
+    els.ruleSlip.value = r.slippageBps;
+  }
 }
 
 function renderMood() {
@@ -959,21 +1109,10 @@ function renderNews() {
   }
 }
 
-function renderRules() {
-  const r = state.rules;
-  els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit, ${r.riskPct}% risk with a ${r.stopPct}% stop.`;
-  if (!els.rulesBox.open) {
-    els.ruleCash.value = r.startingCash;
-    els.ruleTrades.value = r.maxTrades;
-    els.ruleLoss.value = r.lossLimit;
-    els.ruleRisk.value = r.riskPct;
-    els.ruleStop.value = r.stopPct;
-  }
-}
-
 function render() {
   renderCoin();
-  renderTrade();
+  renderTicket();
+  renderOrders();
   renderPortfolio();
   renderTrades();
   renderMood();
@@ -1035,121 +1174,102 @@ for (const btn of els.ranges) {
   });
 }
 
-els.buyForm.addEventListener("submit", (e) => {
+// ---- The order ticket ----
+
+for (const b of [els.sideBuy, els.sideSell]) {
+  b.addEventListener("click", () => { ticket.side = b.dataset.side; els.tQty.value = ""; els.tStop.value = ""; renderTicket(); });
+}
+for (const b of [els.modeUnits, els.modeDollars]) {
+  b.addEventListener("click", () => { ticket.mode = b.dataset.mode; els.tQty.value = ""; renderTicket(); });
+}
+els.tType.addEventListener("change", () => { els.tLimit.value = ""; els.tStop.value = ""; renderTicket(); });
+for (const input of [els.tQty, els.tLimit, els.tStop, els.tTrail, els.tTif]) {
+  input.addEventListener("input", renderTicket);
+}
+
+// Presets: a share of cash when buying, of the position when selling.
+for (const b of els.presets) {
+  b.addEventListener("click", () => {
+    const pct = Number(b.dataset.pct) / 100;
+    const q = quoteFor(state.selected);
+    if (!q) return;
+    if (ticket.side === "Buy") {
+      const fee = state.rules.commission || 0;
+      const dollars = Math.max(0, (state.cash - fee) * pct);
+      els.tQty.value = ticket.mode === "dollars" ? dollars.toFixed(2) : (dollars / fillPrice(state.selected, "Buy", "market")).toPrecision(6);
+    } else {
+      const pos = positionFor(state.selected);
+      if (!pos) return;
+      const units = pos.units * pct;
+      els.tQty.value = ticket.mode === "units" ? units.toPrecision(6) : (units * fillPrice(state.selected, "Sell", "market")).toFixed(2);
+    }
+    renderTicket();
+  });
+}
+
+els.ticket.addEventListener("submit", (e) => {
   e.preventDefault();
-  const dollars = readAmount(els.buyAmount, els.buyMsg);
-  if (dollars == null) return;
-  if (dollars > state.cash) {
-    els.buyMsg.textContent = `You have ${fmtMoney(state.cash)} in cash.`;
-    els.buyAmount.classList.add("invalid");
-    return;
-  }
-  buy(dollars);
-  els.buyAmount.value = "";
+  const t = readTicket(false);
+  if (!t) return;
+  ticket.reviewing = true;
+  const coin = selectedCoin;
+  const what = t.type === "market"
+    ? `${t.side} ${fmtUnits(t.qty)} ${coin.symbol} at the market, about ${fmtMoney(t.ref)} each.`
+    : `${t.side} ${fmtUnits(t.qty)} ${coin.symbol}, ${ORDER_NAMES[t.type].toLowerCase()} ${t.type === "trailing" ? t.trailPct + "% below the high" : t.type === "stop-limit" ? `stop ${fmtMoney(t.stopPrice)}, limit ${fmtMoney(t.limitPrice)}` : fmtMoney(t.type === "stop" ? t.stopPrice : t.limitPrice)}, ${t.tif === "Day" ? "good for today" : "good till cancelled"}.`;
+  const money = `${t.side === "Buy" ? "Cost" : "Proceeds"} about ${fmtMoney(t.total)}${t.fee ? `, fee ${fmtMoney(t.fee)}` : ""}. Buying power after: ${fmtMoney(t.side === "Buy" ? state.cash - t.total - t.fee : state.cash + t.total - t.fee)}.`;
+  els.reviewText.textContent = `${what} ${money}`;
+  renderTicket();
+  els.tConfirm.focus();
 });
 
-els.sellForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const pos = positionFor(state.selected);
-  if (!pos) {
-    els.sellMsg.textContent = `You do not hold any ${selectedCoin.symbol}.`;
-    return;
-  }
-  const dollars = readAmount(els.sellAmount, els.sellMsg);
-  if (dollars == null) return;
-  const worth = positionValue(pos);
-  if (dollars > worth + 0.005) {
-    els.sellMsg.textContent = `You hold ${fmtMoney(worth)} of ${pos.symbol}.`;
-    els.sellAmount.classList.add("invalid");
-    return;
-  }
-  sell(dollars);
-  els.sellAmount.value = "";
+els.tConfirm.addEventListener("click", () => {
+  const t = readTicket(false);
+  if (!t) { ticket.reviewing = false; renderTicket(); return; }
+  placeTicket(t);
 });
 
-els.sellAllBtn.addEventListener("click", () => {
-  const pos = positionFor(state.selected);
-  if (!pos) return;
-  els.sellMsg.textContent = "";
-  els.sellAmount.classList.remove("invalid");
-  sell(positionValue(pos));
-  els.sellAmount.value = "";
-});
+els.tEdit.addEventListener("click", () => { ticket.reviewing = false; renderTicket(); els.tQty.focus(); });
 
-els.orderType.addEventListener("change", renderTrade);
+els.starBtn.addEventListener("click", toggleWatch);
 
-els.orderForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const type = els.orderType.value;
-  const q = prices[state.selected];
-  const price = Number(els.orderPrice.value.trim());
-  if (els.orderPrice.value.trim() === "" || !Number.isFinite(price) || price <= 0) {
-    els.orderMsg.textContent = "Enter a price above 0.";
-    return;
-  }
-  let dollars = null;
-  if (type === "limit-buy") {
-    dollars = readAmount(els.orderDollars, els.orderMsg);
-    if (dollars == null) return;
-    if (dollars > state.cash) {
-      els.orderMsg.textContent = `You have ${fmtMoney(state.cash)} in cash.`;
-      return;
-    }
-    if (price >= q.price) {
-      els.orderMsg.textContent = `That is above the price now, ${fmtMoney(q.price)}. Just buy.`;
-      return;
-    }
-  } else {
-    if (!positionFor(state.selected)) {
-      els.orderMsg.textContent = `You do not hold any ${selectedCoin.symbol}.`;
-      return;
-    }
-    if (type === "stop-loss" && price >= q.price) {
-      els.orderMsg.textContent = `A stop goes below the price now, ${fmtMoney(q.price)}.`;
-      return;
-    }
-    if (type === "take-profit" && price <= q.price) {
-      els.orderMsg.textContent = `A take-profit goes above the price now, ${fmtMoney(q.price)}.`;
-      return;
-    }
-  }
-  els.orderMsg.textContent = "";
-  placeOrder(type, price, dollars);
-  els.orderPrice.value = "";
-  els.orderDollars.value = "";
-});
+for (const b of els.tapeTabs) {
+  b.addEventListener("click", () => { tapeView = b.dataset.tape; renderTape(); });
+}
 
 els.ordersList.addEventListener("click", (e) => {
   const btn = e.target.closest(".cancel");
   if (btn) cancelOrder(Number(btn.dataset.id));
 });
 
-els.exportBtn.addEventListener("click", () => {
-  const blob = new Blob([tradesCsv()], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `paper-trades-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+els.positionsBody.addEventListener("click", (e) => {
+  const btn = e.target.closest(".close-btn");
+  if (btn) closePosition(btn.dataset.id);
 });
 
-// [key, input, message, whole number?]
+els.exportBtn.addEventListener("click", () => {
+  location.href = "trades.html";
+});
+
+// [key, input, message, whole number?, allow zero?]
 const RULE_FIELDS = [
-  ["startingCash", els.ruleCash, $("rule-cash-msg"), true],
-  ["maxTrades", els.ruleTrades, $("rule-trades-msg"), true],
-  ["lossLimit", els.ruleLoss, $("rule-loss-msg"), true],
-  ["riskPct", els.ruleRisk, $("rule-risk-msg"), false],
-  ["stopPct", els.ruleStop, $("rule-stop-msg"), false],
+  ["startingCash", els.ruleCash, $("rule-cash-msg"), true, false],
+  ["maxTrades", els.ruleTrades, $("rule-trades-msg"), true, false],
+  ["lossLimit", els.ruleLoss, $("rule-loss-msg"), true, false],
+  ["riskPct", els.ruleRisk, $("rule-risk-msg"), false, false],
+  ["stopPct", els.ruleStop, $("rule-stop-msg"), false, false],
+  ["commission", els.ruleFee, $("rule-fee-msg"), false, true],
+  ["slippageBps", els.ruleSlip, $("rule-slip-msg"), false, true],
 ];
 
 els.rulesForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const next = {};
   let ok = true;
-  for (const [key, input, msg, whole] of RULE_FIELDS) {
+  for (const [key, input, msg, whole, zero] of RULE_FIELDS) {
     const n = Number(input.value.trim());
-    if (input.value.trim() === "" || !Number.isFinite(n) || n <= 0 || (whole && !Number.isInteger(n)) || (!whole && n > 100)) {
-      msg.textContent = whole ? "Use a whole number above 0." : "Use a number above 0, up to 100.";
+    const bad = input.value.trim() === "" || !Number.isFinite(n) || (zero ? n < 0 : n <= 0) || (whole && !Number.isInteger(n)) || (!whole && !zero && n > 100);
+    if (bad) {
+      msg.textContent = whole ? "Use a whole number above 0." : zero ? "Use 0 or more." : "Use a number above 0, up to 100.";
       input.classList.add("invalid");
       ok = false;
     } else {

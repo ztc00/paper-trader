@@ -55,11 +55,11 @@
       <div class="table-wrap">
         <table class="grid" id="positions-table" hidden>
           <thead>
-            <tr><th>Asset</th><th>Market</th><th>Units</th><th>Avg</th><th>Price</th><th>Today</th><th>Cost</th><th>Value</th><th>Weight</th><th>P&amp;L</th></tr>
+            <tr><th>Asset</th><th>Market</th><th>Units</th><th>Avg</th><th>Price</th><th>Today</th><th>Cost</th><th>Value</th><th>Weight</th><th>P&amp;L</th><th></th></tr>
           </thead>
           <tbody id="positions-body"></tbody>
           <tfoot>
-            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="fig" id="positions-cost"></td><td class="fig" id="positions-value"></td><td></td><td class="fig" id="positions-pnl"></td></tr>
+            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="fig" id="positions-cost"></td><td class="fig" id="positions-value"></td><td></td><td class="fig" id="positions-pnl"></td><td></td></tr>
           </tfoot>
         </table>
       </div>
@@ -77,6 +77,8 @@
       <dl class="stats" id="stats"></dl>
     </section>
   </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="js/shared.js"></script>
   <script src="js/charts.js"></script>

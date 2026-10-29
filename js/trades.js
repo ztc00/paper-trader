@@ -62,23 +62,34 @@ function render() {
       const tr = document.createElement("tr");
       tr.className = "day-head";
       const label = el("td", new Date(t.time).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }));
-      label.colSpan = 6;
+      label.colSpan = 7;
       tr.appendChild(label);
       tr.appendChild(el("td", `${dayTrades.length} trade${dayTrades.length === 1 ? "" : "s"} · ${fmtSigned(dayRealized)}`, "fig " + upDown(dayRealized)));
+      tr.appendChild(el("td", ""));
       els.body.appendChild(tr);
     }
-    els.body.appendChild(row([
+    const tr = row([
       new Date(t.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
       [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"],
-      t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
-      t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
-    ]));
+      t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars), t.fee ? fmtMoney(t.fee) : "",
+      t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)], "",
+    ]);
+    // The journal: a note on each trade, saved as you type.
+    const note = document.createElement("input");
+    note.type = "text";
+    note.className = "note-input";
+    note.placeholder = "Why this trade?";
+    note.value = t.note || "";
+    note.maxLength = 140;
+    note.addEventListener("change", () => { t.note = note.value.trim(); save(); });
+    tr.lastChild.appendChild(note);
+    els.body.appendChild(tr);
   }
 }
 
 function tradesCsv(list) {
-  const head = ["time", "side", "via", "asset", "market", "units", "price", "dollars", "realized"];
-  const rows = list.map((t) => [t.time, t.side, t.via || "", t.symbol, isStock(t.coinId) ? "stock" : "crypto", t.units, t.price, t.dollars, t.realized == null ? "" : t.realized]);
+  const head = ["time", "side", "via", "asset", "market", "units", "price", "dollars", "fee", "realized", "note"];
+  const rows = list.map((t) => [t.time, t.side, t.via || "", t.symbol, isStock(t.coinId) ? "stock" : "crypto", t.units, t.price, t.dollars, t.fee || 0, t.realized == null ? "" : t.realized, t.note || ""]);
   // Text that starts like a formula gets a quote in front, so a symbol such as
   // "=SUM" from an API cannot run in a spreadsheet. Numbers are left alone.
   const cell = (v) => {

@@ -24,6 +24,16 @@ trades marked on it; limit, stop-loss and take-profit orders that fill on the
 live price; a performance panel with an equity curve, win rate, profit factor
 and max drawdown; and a CSV export of the log.
 
+Trading works the way the real paper-trading tools work (see RESEARCH.md):
+one order ticket with Buy or Sell, a size in units or dollars with 25 to 100%
+presets, Market, Limit, Stop, Stop-limit or Trailing stop, Day or GTC, a
+live estimate of the fill, total, fee and cash after, and a Review step
+before anything happens. Buys fill at the ask and sells at the bid, with
+slippage on market orders and an optional commission, both settings in My
+rules. Working orders fill on the live price and go to a history. Every
+position has a Close button. A star puts an asset on the watchlist, which the
+tape can show instead of the top 10. Every trade can carry a note.
+
 There are four pages, all on the same saved state: the **Desk** for trading,
 **Markets** for the top 50 coins and the big US tickers, **Portfolio** for
 what you hold with an allocation donut and the performance panel, and
@@ -72,27 +82,30 @@ its own sentiment, shown beside mine so the two can be compared.
 1. Pick **Crypto** or **Stocks**, then type a name or ticker and press Enter,
    or click one on the tape. Its live price, 24h and 7d change and chart appear, with the
    news on the right and the mood under the trade forms.
-2. Type a dollar amount under **Buy** and press Enter or Buy. Cash goes down,
-   a row appears in the portfolio. Buying more of the same coin updates its
-   average price.
-3. **Sell** a dollar amount, or **Sell all**. Cash comes back and the trade log
-   shows the realized profit or loss on that sale.
+2. Fill the **order ticket**: Buy or Sell, a size (units or dollars, or a
+   preset), an order type, then Review and Confirm. A market order fills at
+   once at the ask or bid; the rest wait under Orders until the live price
+   gets there. Buying more of the same asset updates its average price.
+3. To get out, **Close** on the position, or a Sell order. Cash comes back
+   and the log shows the realized profit or loss after fees.
 4. Read the portfolio: value and P&L per coin and in total, and the header
    for your total since the start.
-5. Place an **order** instead of trading now: buy when the price drops to a
-   level, or sell all if it falls to a stop or rises to a target. It fills
-   on the live price and shows up in the log with its type.
+5. **Orders** lists what is working, with Cancel, and a history of what
+   filled, expired or was cancelled. A toast says when something fills.
 6. Read **Performance** for the equity curve and the numbers behind it, or
    open **Portfolio** for the allocation and every position in detail, and
    **Trades** for the log by day and the CSV export. **Markets** lists the
    top 50 coins and the big tickers; click one to trade it.
 7. **Edit** the rules at the bottom: starting cash, max trades a day, daily
-   loss limit, risk per trade and stop distance. **Start over** puts cash
-   back and clears positions, orders and trades.
+   loss limit, risk per trade, stop distance, commission per fill and
+   slippage. **Start over** puts cash back and clears positions, orders and
+   trades.
 
 ## Files
 
 - `PROPOSAL.md`: what I planned before any code, in my words.
+- `RESEARCH.md`: what TradingView, thinkorswim, Webull and the exchange demos
+  do, and what the trading flow took from each.
 - `PRD.md`: the plan in detail, with every state of the page.
 - `DESIGN.md`: colors, type and layout. The CSS only uses values from it.
 - `AGENTS.md`: the rules the agent follows.

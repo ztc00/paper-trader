@@ -38,7 +38,7 @@ function liveConnect() {
   live.socket.onmessage = (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type === "ticker" && msg.price) {
-      applyTick(msg.product_id.replace("-USD", ""), Number(msg.price));
+      applyTick(msg.product_id.replace("-USD", ""), Number(msg.price), Number(msg.best_bid), Number(msg.best_ask));
     } else if (msg.type === "subscriptions") {
       live.subscribed = new Set((msg.channels || []).flatMap((c) => c.product_ids || []));
       liveStatusChanged();

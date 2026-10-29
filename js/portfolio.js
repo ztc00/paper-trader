@@ -55,12 +55,18 @@ function render() {
     value += r.value;
     cost += r.cost;
     const weight = total > 0 ? (r.value / total) * 100 : 0;
-    els.positionsBody.appendChild(row([
+    const tr = row([
       r.p.symbol, isStock(r.p.id) ? "Stock" : "Crypto", fmtUnits(r.p.units), fmtMoney(r.p.avgPrice),
       r.q ? fmtMoney(r.price) : "—", r.q ? [fmtPct(r.q.change24h), upDown(r.q.change24h)] : "—",
       fmtMoney(r.cost), fmtMoney(r.value), `${weight.toFixed(1)}%`,
-      [`${fmtSigned(r.gain)} (${fmtPct(r.cost ? (r.gain / r.cost) * 100 : 0)})`, upDown(r.gain)],
-    ]));
+      [`${fmtSigned(r.gain)} (${fmtPct(r.cost ? (r.gain / r.cost) * 100 : 0)})`, upDown(r.gain)], "",
+    ]);
+    const close = el("button", "Close", "quiet close-btn");
+    close.type = "button";
+    close.dataset.id = r.p.id;
+    close.disabled = !r.q || Boolean(blockReason());
+    tr.lastChild.appendChild(close);
+    els.positionsBody.appendChild(tr);
   }
   els.positionsCost.textContent = fmtMoney(cost);
   els.positionsValue.textContent = fmtMoney(value);
@@ -87,11 +93,12 @@ function render() {
   // Orders, read-only here.
   show(els.ordersEmpty, state.orders.length === 0);
   els.ordersList.replaceChildren();
-  const words = { "limit-buy": "Buy", "stop-loss": "Sell all if it falls to", "take-profit": "Sell all if it rises to" };
+  const names = { market: "Market", limit: "Limit", stop: "Stop", "stop-limit": "Stop-limit", trailing: "Trailing stop" };
   for (const o of state.orders) {
-    const text = o.type === "limit-buy"
-      ? `Buy ${fmtMoney(o.dollars)} of ${o.symbol} when it drops to ${fmtMoney(o.price)}`
-      : `${words[o.type]} ${fmtMoney(o.price)} · ${o.symbol}`;
+    const at = o.type === "limit" ? `at ${fmtMoney(o.limitPrice)}` : o.type === "stop" ? `stop ${fmtMoney(o.stopPrice)}`
+      : o.type === "stop-limit" ? `stop ${fmtMoney(o.stopPrice)}, limit ${fmtMoney(o.limitPrice)}` : o.type === "trailing" ? `trailing ${o.trailPct}%` : "";
+    const size = o.qty != null ? fmtUnits(o.qty) : o.all ? "all" : fmtMoney(o.dollars) + " of";
+    const text = `${o.side} ${size} ${o.symbol} ${names[o.type]} ${at} · ${o.tif}`;
     const li = document.createElement("li");
     li.appendChild(el("span", text));
     const q = prices[o.coinId];
@@ -126,6 +133,19 @@ async function refresh() {
   els.updated.className = failed.length ? "error" : "muted";
   render();
 }
+
+// Close: sell the whole position at the market, right here.
+els.positionsBody.addEventListener("click", (e) => {
+  const btn = e.target.closest(".close-btn");
+  if (!btn) return;
+  const pos = positionFor(btn.dataset.id);
+  if (!pos || blockReason()) return;
+  const fill = fillPrice(pos.id, "Sell", "market");
+  sellUnits({ id: pos.id, name: pos.name, symbol: pos.symbol }, pos.units, fill, "Close");
+  save();
+  toast(`Closed ${pos.symbol} at ${fmtMoney(fill)}.`, "down");
+  render();
+});
 
 load();
 render();

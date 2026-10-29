@@ -27,8 +27,14 @@
     </div>
   </header>
 
-  <section class="tape-wrap" aria-label="Top coins">
-    <ul class="tape" id="tape"><li class="muted">Loading the tape…</li></ul>
+  <section class="tape-wrap" aria-label="Tape">
+    <div class="tape-row">
+      <div class="seg tape-tabs" role="group" aria-label="Tape">
+        <button type="button" class="seg-btn active" data-tape="top" id="tape-top">Top 10</button>
+        <button type="button" class="seg-btn" data-tape="watch" id="tape-watch">Watchlist</button>
+      </div>
+      <ul class="tape" id="tape"><li class="muted">Loading the tape…</li></ul>
+    </div>
   </section>
 
   <main class="layout">
@@ -55,11 +61,18 @@
 
       <section class="block coin" aria-labelledby="h-coin" aria-live="polite">
         <h2 id="h-coin">Coin</h2>
-        <p class="muted" id="coin-empty">Search a coin to start, like bitcoin or sol, or pick one off the tape.</p>
+        <div id="coin-empty">
+          <p class="muted">Nothing picked yet. Three steps:</p>
+          <ol class="steps">
+            <li>Search a coin or a stock above, or click one on the tape.</li>
+            <li>Fill the order ticket: Buy or Sell, a size, an order type, then Review and Confirm.</li>
+            <li>Watch the position and the P&amp;L move with the live price. Your rules and the mood sit under the ticket.</li>
+          </ol>
+        </div>
         <p class="muted" id="coin-loading" hidden>Loading…</p>
         <p class="error" id="coin-error" hidden><span id="coin-error-text"></span> <button type="button" class="quiet small" id="coin-retry">Retry</button></p>
         <div id="coin-body" hidden>
-          <p class="coin-name"><span id="coin-name"></span> <span class="muted fig" id="coin-symbol"></span></p>
+          <p class="coin-name"><span id="coin-name"></span> <span class="muted fig" id="coin-symbol"></span> <button type="button" class="quiet small star" id="star-btn" aria-pressed="false">☆ Watch</button></p>
           <p class="price fig" id="coin-price"></p>
           <p class="muted fig" id="coin-change"></p>
           <p class="muted" id="coin-updated"></p>
@@ -77,43 +90,101 @@
       </section>
 
       <section class="block" aria-labelledby="h-trade">
-        <h2 id="h-trade">Trade</h2>
-        <div class="forms">
-          <form id="buy-form" novalidate>
-            <label for="buy-amount">Buy, in dollars <span class="sizer" id="sizer"></span></label>
-            <div class="row">
-              <input id="buy-amount" class="fig" type="text" inputmode="decimal" placeholder="250" disabled>
-              <button type="submit" class="buy" id="buy-btn" disabled>Buy</button>
-            </div>
-            <p class="field-msg" id="buy-msg" aria-live="polite"></p>
-          </form>
-          <form id="sell-form" novalidate>
-            <label for="sell-amount">Sell, in dollars</label>
-            <div class="row">
-              <input id="sell-amount" class="fig" type="text" inputmode="decimal" placeholder="250" disabled>
-              <button type="submit" class="sell" id="sell-btn" disabled>Sell</button>
-              <button type="button" class="quiet" id="sell-all-btn" disabled>Sell all</button>
-            </div>
-            <p class="field-msg" id="sell-msg" aria-live="polite"></p>
-          </form>
+        <div class="section-head">
+          <h2 id="h-trade">Order ticket</h2>
+          <p class="muted fig" id="bp-line"></p>
         </div>
-        <p class="note" id="trade-note" aria-live="polite"></p>
-
-        <form id="order-form" class="order" novalidate>
-          <label for="order-type">Order, filled when the live price gets there</label>
-          <div class="row">
-            <select id="order-type" disabled>
-              <option value="limit-buy">Buy when it drops to</option>
-              <option value="stop-loss">Sell all if it falls to</option>
-              <option value="take-profit">Sell all if it rises to</option>
-            </select>
-            <input id="order-price" class="fig" type="text" inputmode="decimal" placeholder="price" disabled>
-            <input id="order-dollars" class="fig" type="text" inputmode="decimal" placeholder="dollars" disabled>
-            <button type="submit" class="quiet" id="order-btn" disabled>Place</button>
+        <form id="ticket" novalidate>
+          <div class="seg" role="group" aria-label="Side">
+            <button type="button" class="seg-btn active" data-side="Buy" id="side-buy">Buy</button>
+            <button type="button" class="seg-btn" data-side="Sell" id="side-sell">Sell</button>
           </div>
-          <p class="field-msg" id="order-msg" aria-live="polite"></p>
+          <div class="ticket-grid">
+            <div class="field">
+              <label for="t-type">Order type</label>
+              <select id="t-type">
+                <option value="market">Market</option>
+                <option value="limit">Limit</option>
+                <option value="stop">Stop</option>
+                <option value="stop-limit">Stop-limit</option>
+                <option value="trailing">Trailing stop</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="t-tif">Time in force</label>
+              <select id="t-tif">
+                <option value="GTC">Good till cancelled</option>
+                <option value="Day">Day</option>
+              </select>
+            </div>
+            <div class="field wide">
+              <label for="t-qty">Size
+                <span class="seg small" role="group" aria-label="Size in">
+                  <button type="button" class="seg-btn active" data-mode="units" id="mode-units">Units</button>
+                  <button type="button" class="seg-btn" data-mode="dollars" id="mode-dollars">Dollars</button>
+                </span>
+              </label>
+              <div class="row">
+                <input id="t-qty" class="fig" type="text" inputmode="decimal" placeholder="0.5">
+                <div class="presets" role="group" aria-label="Size presets">
+                  <button type="button" class="quiet small" data-pct="25">25%</button>
+                  <button type="button" class="quiet small" data-pct="50">50%</button>
+                  <button type="button" class="quiet small" data-pct="75">75%</button>
+                  <button type="button" class="quiet small" data-pct="100">100%</button>
+                </div>
+              </div>
+              <p class="field-msg" id="t-qty-msg" aria-live="polite"></p>
+              <p class="muted sizer" id="sizer"></p>
+            </div>
+            <div class="field" id="f-limit" hidden>
+              <label for="t-limit">Limit price</label>
+              <input id="t-limit" class="fig" type="text" inputmode="decimal">
+              <p class="field-msg" id="t-limit-msg"></p>
+            </div>
+            <div class="field" id="f-stop" hidden>
+              <label for="t-stop">Stop price</label>
+              <input id="t-stop" class="fig" type="text" inputmode="decimal">
+              <p class="field-msg" id="t-stop-msg"></p>
+            </div>
+            <div class="field" id="f-trail" hidden>
+              <label for="t-trail">Trail, % below the high</label>
+              <input id="t-trail" class="fig" type="text" inputmode="decimal" placeholder="5">
+              <p class="field-msg" id="t-trail-msg"></p>
+            </div>
+          </div>
+          <dl class="estimate" id="estimate">
+            <div><dt id="est-price-label">Est. fill</dt><dd class="fig" id="est-price">—</dd></div>
+            <div><dt id="est-total-label">Est. cost</dt><dd class="fig" id="est-total">—</dd></div>
+            <div><dt>Fee</dt><dd class="fig" id="est-fee">—</dd></div>
+            <div><dt>Cash after</dt><dd class="fig" id="est-bp">—</dd></div>
+          </dl>
+          <p class="note" id="trade-note" aria-live="polite"></p>
+          <button type="submit" class="buy ticket-btn" id="t-review" disabled>Review order</button>
         </form>
-        <ul class="orders" id="orders-list" aria-label="Pending orders"></ul>
+        <div class="review" id="review" hidden aria-live="polite">
+          <p class="review-title">Review</p>
+          <p id="review-text"></p>
+          <div class="row">
+            <button type="button" class="buy ticket-btn" id="t-confirm">Confirm</button>
+            <button type="button" class="quiet" id="t-edit">Edit</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="h-orders">
+        <h2 id="h-orders">Orders</h2>
+        <p class="muted" id="orders-empty">No working orders.</p>
+        <ul class="orders" id="orders-list" aria-label="Working orders"></ul>
+        <details class="history" id="history">
+          <summary><span>History</span> <span class="muted fig" id="history-count"></span></summary>
+          <p class="muted" id="history-empty">Nothing filled yet.</p>
+          <div class="table-wrap">
+            <table class="grid" id="history-table" hidden>
+              <thead><tr><th>When</th><th>Order</th><th>Asset</th><th>Size</th><th>Price</th><th>Status</th></tr></thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+        </details>
       </section>
 
       <section class="block" aria-labelledby="h-mood" aria-live="polite">
@@ -148,11 +219,11 @@
         <div class="table-wrap">
         <table class="grid" id="positions-table" hidden>
           <thead>
-            <tr><th>Coin</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th></tr>
+            <tr><th>Asset</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th><th></th></tr>
           </thead>
           <tbody id="positions-body"></tbody>
           <tfoot>
-            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td></tr>
+            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td><td></td></tr>
           </tfoot>
         </table>
         </div>
@@ -173,7 +244,7 @@
         <div class="table-wrap">
         <table class="grid" id="trades-table" hidden>
           <thead>
-            <tr><th>Time</th><th>Side</th><th>Coin</th><th>Units</th><th>Price</th><th>Dollars</th><th>Realized</th></tr>
+            <tr><th>Time</th><th>Side</th><th>Asset</th><th>Units</th><th>Price</th><th>Dollars</th><th>Fee</th><th>Realized</th></tr>
           </thead>
           <tbody id="trades-body"></tbody>
         </table>
@@ -185,7 +256,7 @@
 
   <footer class="foot">
     <details class="rules-box" id="rules-box">
-      <summary><span id="rules-summary">$10,000 to start, 5 trades a day, $500 daily loss limit, 1% risk with a 5% stop.</span> <span class="summary-action">Edit</span></summary>
+      <summary><span id="rules-summary">$10,000 to start, 5 trades a day, $500 daily loss limit, 1% risk with a 5% stop, no commission, 5 bps slippage.</span> <span class="summary-action">Edit</span></summary>
       <form id="rules-form" class="rules" novalidate>
         <div class="rule">
           <label for="rule-cash">Starting cash</label>
@@ -212,11 +283,23 @@
           <input id="rule-stop" class="fig" type="text" inputmode="decimal">
           <p class="field-msg" id="rule-stop-msg"></p>
         </div>
+        <div class="rule">
+          <label for="rule-fee">Commission per fill, $</label>
+          <input id="rule-fee" class="fig" type="text" inputmode="decimal">
+          <p class="field-msg" id="rule-fee-msg"></p>
+        </div>
+        <div class="rule">
+          <label for="rule-slip">Slippage on market orders, bps</label>
+          <input id="rule-slip" class="fig" type="text" inputmode="decimal">
+          <p class="field-msg" id="rule-slip-msg"></p>
+        </div>
         <button type="submit" class="quiet">Save rules</button>
       </form>
     </details>
     <button type="button" class="quiet danger" id="start-over">Start over</button>
   </footer>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="js/shared.js"></script>
   <script src="js/charts.js"></script>

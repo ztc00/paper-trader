@@ -395,6 +395,77 @@ label {
   gap: 12px;
 }
 
+/* Order ticket */
+
+.seg { display: inline-flex; border: 1px solid var(--edge); border-radius: var(--radius); overflow: hidden; }
+.seg-btn { height: 40px; padding: 0 16px; border: 0; border-radius: 0; background: transparent; color: var(--text-muted); font-size: var(--small); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--edge); }
+.seg-btn.active { background: var(--well); color: var(--text); font-weight: 700; }
+#side-buy.active { color: var(--up); }
+#side-sell.active { color: var(--down); }
+.seg.small .seg-btn { height: 26px; padding: 0 10px; font-size: 13px; }
+label .seg { margin-left: 8px; vertical-align: middle; }
+
+.ticket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.ticket-grid .field.wide { grid-column: 1 / -1; }
+.ticket-grid select, .ticket-grid input { width: 100%; }
+.presets { display: flex; gap: 4px; flex-shrink: 0; }
+.presets button { height: var(--control); padding: 0 9px; }
+
+.estimate {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.estimate div { display: flex; flex-direction: column; gap: 2px; font-size: var(--small); }
+.estimate dt { color: var(--text-muted); white-space: nowrap; }
+.estimate dd { margin: 0; font-size: var(--body); }
+
+.ticket-btn { width: 100%; margin-top: 8px; }
+.ticket-btn.sell-side { background: var(--down); border-color: var(--down); color: #FFFFFF; }
+
+.review {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--up);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.review.sell-side { border-color: var(--down); }
+.review-title { font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.1em; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+.review .row { margin-top: 12px; }
+.review .row button { flex: 1; }
+
+.steps { margin: 8px 0 0; padding-left: 20px; font-size: var(--small); color: var(--text-muted); }
+.steps li { margin-bottom: 4px; }
+
+.star { height: 26px; padding: 0 8px; font-size: 13px; vertical-align: middle; margin-left: 6px; }
+.star[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); }
+
+.tape-row { display: flex; align-items: center; gap: 12px; }
+.tape-tabs { flex-shrink: 0; }
+
+.history { margin-top: 12px; }
+.history summary { cursor: pointer; font-size: var(--small); color: var(--text-muted); list-style: none; display: flex; gap: 8px; }
+.history summary::-webkit-details-marker { display: none; }
+.history summary::before { content: "▸"; }
+.history[open] summary::before { content: "▾"; }
+.history .table-wrap, .history p { margin-top: 8px; }
+
+.close-btn { height: 26px; padding: 0 8px; font-size: 13px; }
+
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+.toast { padding: 10px 14px; background: var(--surface); border: 1px solid var(--edge); border-left: 3px solid var(--up); border-radius: var(--radius); font-size: var(--small); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+.toast.down { border-left-color: var(--down); }
+.toast.warn { border-left-color: var(--warn); }
+
 /* Sizer, orders */
 
 label[for="buy-amount"] { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
@@ -587,6 +658,8 @@ select:disabled { opacity: 0.4; }
 .filters select, .filters input { flex: 0 1 200px; height: 40px; }
 
 .day-head td { color: var(--text-muted); font-weight: 400; padding-top: 16px; font-family: var(--font-body); }
+.note-input { height: 32px; width: 180px; font-size: 13px; font-family: var(--font-body); font-weight: 400; }
+.grid td:last-child .note-input { text-align: left; }
 .day-head td:first-child { text-align: left; }
 
 .markets .grid td:nth-child(3), .markets .grid th:nth-child(3) { text-align: left; }
@@ -650,7 +723,9 @@ select:disabled { opacity: 0.4; }
   .cards { grid-template-columns: repeat(4, 1fr); }
   .foot { flex-direction: row; justify-content: space-between; align-items: flex-start; }
   .rules-box { flex: 1; }
-  .rules { grid-template-columns: repeat(5, 1fr) auto; align-items: end; }
+  .rules { grid-template-columns: repeat(4, 1fr); align-items: end; }
+  .rules button { grid-column: 4; }
+  .estimate { grid-template-columns: repeat(4, 1fr); }
   .stats { grid-template-columns: repeat(3, 1fr); }
 }
 
