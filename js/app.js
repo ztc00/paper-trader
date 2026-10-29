@@ -794,6 +794,8 @@ function renderPerformance() {
   renderStats(els.stats);
   const points = state.equity.slice();
   points.push([Date.now(), portfolioTotal()]);
+  // Before anything happened, a flat line at the starting cash.
+  if (points.length < 2) points.unshift([Date.now() - 60 * 1000, state.rules.startingCash]);
   drawLineChart(els.equity, points, {
     height: 180,
     baseline: state.rules.startingCash,

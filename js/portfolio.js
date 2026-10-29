@@ -102,6 +102,8 @@ function render() {
   renderStats(els.stats);
   const points = state.equity.slice();
   points.push([Date.now(), total]);
+  // Before anything happened, a flat line at the starting cash.
+  if (points.length < 2) points.unshift([Date.now() - 60 * 1000, state.rules.startingCash]);
   drawLineChart(els.equity, points, {
     height: 220,
     baseline: state.rules.startingCash,
