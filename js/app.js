@@ -115,6 +115,18 @@ function fetchPrices() {
   fetchStockPrices();
 }
 
+// CoinGecko's free tier allows about 30 calls a minute from one address.
+// A 429 means wait, not that the connection is down.
+function geckoError(response) {
+  return new Error(response.status === 429
+    ? "CoinGecko is rate-limiting right now. Try again in a minute."
+    : `CoinGecko answered ${response.status}`);
+}
+
+function geckoMessage(err) {
+  return /rate-limiting/.test(err.message) ? err.message : "Could not reach CoinGecko. Check your connection and retry.";
+}
+
 // After any batch of prices lands: equity point, redraw, flash, orders.
 function pricesLanded(before) {
   lastPriceAt = new Date();
@@ -142,7 +154,7 @@ async function fetchCryptoPrices() {
   if (firstTime) setCoinView("loading");
   try {
     const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${ids.join(",")}&price_change_percentage=24h,7d`);
-    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+    if (!response.ok) throw geckoError(response);
     const data = await response.json();
     const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
     for (const c of data) {
@@ -154,7 +166,7 @@ async function fetchCryptoPrices() {
     }
     pricesLanded(before);
   } catch (err) {
-    if (selectedHere) priceFailed(firstTime, "Could not reach CoinGecko. Check your connection and retry.");
+    if (selectedHere) priceFailed(firstTime, geckoMessage(err));
   }
 }
 
@@ -240,7 +252,7 @@ async function fetchChart() {
       points = data.points;
     } else {
       const response = await fetch(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`);
-      if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+      if (!response.ok) throw geckoError(response);
       points = (await response.json()).prices;
     }
     chartCache[key] = { points, at: Date.now() };
@@ -249,7 +261,7 @@ async function fetchChart() {
     els.chartStatus.textContent = "";
     renderChart();
   } catch (err) {
-    els.chartStatus.textContent = /not set up/.test(err.message) ? err.message : "Chart is not available right now.";
+    els.chartStatus.textContent = /not set up|rate-limiting/.test(err.message) ? err.message : "Chart is not available right now.";
   }
 }
 
@@ -311,7 +323,7 @@ async function searchCoins(query) {
       els.searchMsg.textContent = matches.length ? "" : "No US stock or ETF called that. Try the ticker.";
     } else {
       const response = await fetch(`${COINGECKO}/search?query=${encodeURIComponent(query)}`);
-      if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+      if (!response.ok) throw geckoError(response);
       const data = await response.json();
       matches = data.coins.slice(0, 5).map((c) => ({
         id: c.id, name: c.name, symbol: c.symbol.toUpperCase(),
@@ -321,7 +333,7 @@ async function searchCoins(query) {
     }
     renderResults(matches);
   } catch (err) {
-    els.searchMsg.textContent = /not set up/.test(err.message) ? err.message : "Could not search right now. Check your connection and retry.";
+    els.searchMsg.textContent = /not set up|rate-limiting/.test(err.message) ? err.message : "Could not search right now. Check your connection and retry.";
   } finally {
     els.searchMsg.classList.remove("muted");
     els.searchBtn.disabled = false;
