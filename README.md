@@ -7,7 +7,7 @@ live price and my own P&L in the first five seconds.
 
 ## What it does
 
-You search a coin, or pick one off the tape of the top 10, and buy or sell a
+You search a coin or a US stock, or pick one off the tape, and buy or sell a
 paper amount of it at the live price. Prices tick in real time from
 Coinbase's public feed, so your P&L moves while you watch. The page keeps
 your cash, positions, orders and trades in your browser and works out what
@@ -50,6 +50,12 @@ its own sentiment, shown beside mine so the two can be compared.
     `/api/news?q=bitcoin`, the function adds the key from Vercel's settings
     and answers with a one-hour cache header, so the news updates hourly and
     the key is in no file in this repo.
+- **Finnhub** (free key): https://finnhub.io/docs/api
+  - Called only from `api/stocks.js`: symbol search, quotes polled every 15
+    seconds, and company news. Its WebSocket is not used because the key
+    would have to sit in the page.
+- **Twelve Data** (free key, 800 calls a day): https://twelvedata.com/docs
+  - Called only from `api/stocks.js` for the stock chart, cached five minutes.
 - **OpenRouter** (the class key, one model): https://openrouter.ai/docs
   - Called from the same function, right after GNews, with the five
     headlines. Cached with them for an hour. Without the key the page still
@@ -57,8 +63,8 @@ its own sentiment, shown beside mine so the two can be compared.
 
 ## How to use it
 
-1. Type a coin name under **Find a coin** and press Enter, or click a coin on
-   the tape. Its live price, 24h and 7d change and chart appear, with the
+1. Pick **Crypto** or **Stocks**, then type a name or ticker and press Enter,
+   or click one on the tape. Its live price, 24h and 7d change and chart appear, with the
    news on the right and the mood under the trade forms.
 2. Type a dollar amount under **Buy** and press Enter or Buy. Cash goes down,
    a row appears in the portfolio. Buying more of the same coin updates its
@@ -87,8 +93,11 @@ its own sentiment, shown beside mine so the two can be compared.
 - `js/live.js`: the Coinbase ticker feed, with reconnects.
 - `js/charts.js`: the price chart, the equity curve and the sparklines, as
   inline SVG.
-- `api/news.js`: the one function. It holds the GNews and OpenRouter keys
-  and nothing else.
+- `api/news.js`: crypto news through GNews, with the model's read.
+- `api/stocks.js`: stock search, quotes, chart and news through Finnhub and
+  Twelve Data, with the model's read.
+- `api/_read.js`: the model call both functions share. Underscore files in
+  `api/` are helpers, not routes.
 
 ## Every state
 

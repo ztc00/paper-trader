@@ -296,6 +296,11 @@ label {
   margin-top: 6px;
 }
 
+/* Market toggle */
+
+.market { display: flex; gap: 4px; }
+.market-btn.active { border-color: var(--up); color: var(--up); }
+
 /* Search results */
 
 .results {

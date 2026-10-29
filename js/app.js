@@ -6,6 +6,22 @@ const COINGECKO = "https://api.coingecko.com/api/v3";
 
 const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500, riskPct: 1, stopPct: 5 };
 
+// Ten big US tickers for the stock tape. Finnhub has no "top 10" endpoint.
+const STOCK_TAPE = [
+  ["SPY", "S&P 500 ETF"], ["QQQ", "Nasdaq 100 ETF"], ["AAPL", "Apple"], ["MSFT", "Microsoft"], ["NVDA", "NVIDIA"],
+  ["AMZN", "Amazon"], ["GOOGL", "Alphabet"], ["META", "Meta"], ["TSLA", "Tesla"], ["AMD", "AMD"],
+];
+
+// Stocks and coins share one id space. A coin id is CoinGecko's slug, like
+// "bitcoin"; a stock id is "stock:AAPL". Everything saved keys off the id.
+function isStock(id) {
+  return typeof id === "string" && id.startsWith("stock:");
+}
+
+function stockSymbol(id) {
+  return id.slice(6);
+}
+
 let state = {
   cash: DEFAULT_RULES.startingCash,
   positions: [], // { id, name, symbol, units, avgPrice }
@@ -14,17 +30,18 @@ let state = {
   selected: null, // the coin id, like "bitcoin"
   orders: [],     // { id, coinId, symbol, name, type, price, dollars, created }
   equity: [],     // [[timeMs, portfolioValue], ...] for the performance chart
+  market: "crypto", // which tab the search and tape show: "crypto" or "stocks"
 };
 
 // Fetched, not saved.
-let prices = {};      // coin id -> { price, change24h, change7d }
+let prices = {};      // id -> { price, change24h, change7d } (stocks: change24h is today's move, change7d null)
 let selectedCoin = null; // { id, name, symbol }
 let lastPriceAt = null;
 let mood = null;   // { value, label } from the Fear & Greed index
 let news = [];     // [{ title, url, source, publishedAt }] for the selected coin
 let newsFor = null; // which coin id the news is for
 let brief = null;   // { text, sentiment, model } the model's read of the news, or null
-let tape = [];     // the top 10 coins by market cap, with 7-day sparklines
+let tape = [];     // the tape on screen: top 10 coins with sparklines, or the ten stocks
 let liveAt = null; // when the last live tick arrived
 let chart = { days: 7, points: [], forId: null }; // the price chart on screen
 const chartCache = {}; // "bitcoin:7" -> { points, at }
@@ -42,6 +59,7 @@ function load() {
       state.orders = Array.isArray(saved.orders) ? saved.orders : [];
       state.equity = Array.isArray(saved.equity) ? saved.equity : [];
       state.selected = saved.selected || null;
+      state.market = saved.market === "stocks" ? "stocks" : "crypto";
       selectedCoin = saved.selectedCoin || null;
     }
   } catch {
@@ -167,6 +185,8 @@ const els = {
   exportBtn: $("export-btn"),
   ruleRisk: $("rule-risk"),
   ruleStop: $("rule-stop"),
+  marketBtns: document.querySelectorAll(".market-btn"),
+  moodSource: $("mood-source"),
 };
 
 function show(el, on) {
@@ -187,23 +207,50 @@ function row(cells) {
   return tr;
 }
 
-// ---------- Fetching from CoinGecko ----------
+// ---------- Fetching prices ----------
 
-// One request for the selected coin and every coin I hold.
-async function fetchPrices() {
+// Everything on screen that needs a price: the selected one and every position.
+function wantedIds() {
   const ids = new Set(state.positions.map((p) => p.id));
   if (state.selected) ids.add(state.selected);
-  if (ids.size === 0) return;
+  return [...ids];
+}
 
-  const url = `${COINGECKO}/coins/markets?vs_currency=usd&ids=${[...ids].join(",")}&price_change_percentage=24h,7d`;
-  const firstTime = !prices[state.selected];
+function fetchPrices() {
+  fetchCryptoPrices();
+  fetchStockPrices();
+}
+
+// After any batch of prices lands: equity point, redraw, flash, orders.
+function pricesLanded(before) {
+  lastPriceAt = new Date();
+  recordEquity(false);
+  render();
+  flashPrice(before);
+  checkOrders();
+}
+
+function priceFailed(firstTime, message) {
+  if (firstTime) {
+    setCoinView("error", message);
+  } else {
+    // Keep the last prices and say so.
+    els.coinUpdated.textContent = `Could not refresh. Last price ${timeAgo(lastPriceAt)}.`;
+  }
+}
+
+// One CoinGecko request for every coin on screen.
+async function fetchCryptoPrices() {
+  const ids = wantedIds().filter((id) => !isStock(id));
+  if (ids.length === 0) return;
+  const selectedHere = state.selected && !isStock(state.selected);
+  const firstTime = selectedHere && !prices[state.selected];
   if (firstTime) setCoinView("loading");
-
   try {
-    const response = await fetch(url);
+    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${ids.join(",")}&price_change_percentage=24h,7d`);
     if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
     const data = await response.json();
-    const before = prices[state.selected] ? prices[state.selected].price : null;
+    const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
     for (const c of data) {
       prices[c.id] = {
         price: c.current_price,
@@ -211,23 +258,45 @@ async function fetchPrices() {
         change7d: c.price_change_percentage_7d_in_currency,
       };
     }
-    lastPriceAt = new Date();
-    recordEquity(false);
-    render();
-    flashPrice(before);
-    checkOrders();
+    pricesLanded(before);
   } catch (err) {
-    if (firstTime) {
-      setCoinView("error", "Could not reach CoinGecko. Check your connection and retry.");
-    } else {
-      // Keep the last prices and say so.
-      els.coinUpdated.textContent = `Could not refresh. Last price ${timeAgo(lastPriceAt)}.`;
-    }
+    if (selectedHere) priceFailed(firstTime, "Could not reach CoinGecko. Check your connection and retry.");
   }
 }
 
-// The top 10 coins by market cap, with their last 7 days, for the tape.
+// One request to my stocks function for every stock on screen. It polls
+// Finnhub, so this runs every 15 seconds instead of live.
+async function fetchStockPrices(extraSymbols = []) {
+  const symbols = new Set(wantedIds().filter(isStock).map(stockSymbol).concat(extraSymbols));
+  if (symbols.size === 0) return;
+  const selectedHere = state.selected && isStock(state.selected);
+  const firstTime = selectedHere && !prices[state.selected];
+  if (firstTime) setCoinView("loading");
+  try {
+    const response = await fetch(`/api/stocks?op=quote&symbols=${encodeURIComponent([...symbols].join(","))}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `The stocks function answered ${response.status}`);
+    const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
+    for (const [sym, q] of Object.entries(data.quotes)) {
+      prices[`stock:${sym}`] = { price: q.price, change24h: q.changePct, change7d: null, prevClose: q.prevClose, at: q.at };
+    }
+    if (selectedHere && !prices[state.selected]) throw new Error("Finnhub has no price for that symbol.");
+    pricesLanded(before);
+  } catch (err) {
+    if (selectedHere) priceFailed(firstTime, /not set up/.test(err.message) ? err.message : "Could not get stock prices right now.");
+  }
+}
+
+// The tape: the top 10 coins by market cap with their last 7 days, or the
+// ten stocks in STOCK_TAPE with today's move.
 async function fetchTape() {
+  if (state.market === "stocks") {
+    tape = STOCK_TAPE.map(([symbol, name]) => ({ id: `stock:${symbol}`, name, symbol, spark: [] }));
+    await fetchStockPrices(STOCK_TAPE.map(([symbol]) => symbol));
+    renderTape();
+    renderMood();
+    return;
+  }
   try {
     const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=24h,7d`);
     if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
@@ -251,7 +320,7 @@ async function fetchTape() {
     watchLive();
   } catch (err) {
     if (tape.length === 0) {
-      els.tape.replaceChildren(el("li", "Could not load the top coins.", "muted"));
+      els.tape.replaceChildren(el("li", "Could not load the tape.", "muted"));
     }
   }
 }
@@ -269,25 +338,33 @@ async function fetchChart() {
   }
   els.chartStatus.textContent = "Loading…";
   try {
-    const response = await fetch(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`);
-    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
-    const data = await response.json();
-    chartCache[key] = { points: data.prices, at: Date.now() };
+    let points;
+    if (isStock(id)) {
+      const response = await fetch(`/api/stocks?op=chart&symbol=${encodeURIComponent(stockSymbol(id))}&days=${chart.days}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `The stocks function answered ${response.status}`);
+      points = data.points;
+    } else {
+      const response = await fetch(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`);
+      if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+      points = (await response.json()).prices;
+    }
+    chartCache[key] = { points, at: Date.now() };
     if (state.selected !== id) return; // the user moved on while this loaded
-    chart = { days: chart.days, points: data.prices, forId: id };
+    chart = { days: chart.days, points, forId: id };
     els.chartStatus.textContent = "";
     renderChart();
   } catch (err) {
-    els.chartStatus.textContent = "Chart is not available right now.";
+    els.chartStatus.textContent = /not set up/.test(err.message) ? err.message : "Chart is not available right now.";
   }
 }
 
 // Every coin on screen, by symbol, so a live tick can find it.
 function coinsBySymbol() {
   const map = {};
-  for (const c of tape) map[c.symbol] = c.id;
-  for (const p of state.positions) map[p.symbol] = p.id;
-  if (selectedCoin) map[selectedCoin.symbol] = selectedCoin.id;
+  for (const c of tape) if (!isStock(c.id)) map[c.symbol] = c.id;
+  for (const p of state.positions) if (!isStock(p.id)) map[p.symbol] = p.id;
+  if (selectedCoin && !isStock(selectedCoin.id)) map[selectedCoin.symbol] = selectedCoin.id;
   return map;
 }
 
@@ -331,14 +408,26 @@ async function searchCoins(query) {
   els.searchMsg.textContent = "Searching…";
   els.searchMsg.classList.add("muted");
   try {
-    const response = await fetch(`${COINGECKO}/search?query=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
-    const data = await response.json();
-    const matches = data.coins.slice(0, 5);
-    els.searchMsg.textContent = matches.length ? "" : "No coin called that. Try the full name.";
+    let matches;
+    if (state.market === "stocks") {
+      const response = await fetch(`/api/stocks?op=search&q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `The stocks function answered ${response.status}`);
+      matches = data.matches.map((m) => ({ id: `stock:${m.symbol}`, name: m.name, symbol: m.symbol, meta: m.type }));
+      els.searchMsg.textContent = matches.length ? "" : "No US stock or ETF called that. Try the ticker.";
+    } else {
+      const response = await fetch(`${COINGECKO}/search?query=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+      const data = await response.json();
+      matches = data.coins.slice(0, 5).map((c) => ({
+        id: c.id, name: c.name, symbol: c.symbol.toUpperCase(),
+        meta: Number.isInteger(c.market_cap_rank) ? `#${c.market_cap_rank}` : "",
+      }));
+      els.searchMsg.textContent = matches.length ? "" : "No coin called that. Try the full name.";
+    }
     renderResults(matches);
   } catch (err) {
-    els.searchMsg.textContent = "Could not reach CoinGecko. Check your connection and retry.";
+    els.searchMsg.textContent = /not set up/.test(err.message) ? err.message : "Could not search right now. Check your connection and retry.";
   } finally {
     els.searchMsg.classList.remove("muted");
     els.searchBtn.disabled = false;
@@ -354,10 +443,9 @@ function renderResults(matches) {
     btn.className = "result";
     btn.dataset.id = c.id;
     btn.dataset.name = c.name;
-    btn.dataset.symbol = c.symbol.toUpperCase();
-    const rank = Number.isInteger(c.market_cap_rank) ? ` · #${c.market_cap_rank}` : "";
+    btn.dataset.symbol = c.symbol;
     btn.appendChild(el("span", c.name));
-    btn.appendChild(el("span", c.symbol.toUpperCase() + rank, "meta fig"));
+    btn.appendChild(el("span", c.symbol + (c.meta ? ` · ${c.meta}` : ""), "meta fig"));
     li.appendChild(btn);
     els.results.appendChild(li);
   }
@@ -416,7 +504,10 @@ async function fetchNews() {
   const coin = selectedCoin;
   setNewsView("loading");
   try {
-    const response = await fetch(`/api/news?q=${encodeURIComponent(coin.name)}`);
+    const url = isStock(coin.id)
+      ? `/api/stocks?op=news&symbol=${encodeURIComponent(coin.symbol)}&name=${encodeURIComponent(coin.name)}`
+      : `/api/news?q=${encodeURIComponent(coin.name)}`;
+    const response = await fetch(url);
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || `The news function answered ${response.status}`);
@@ -430,7 +521,7 @@ async function fetchNews() {
     news = [];
     brief = null;
     newsFor = null;
-    setNewsView("error", err.message === "News is not set up yet." ? err.message : "News is not available right now.");
+    setNewsView("error", /not set up/.test(err.message) ? err.message : "News is not available right now.");
     render();
   }
 }
@@ -683,7 +774,9 @@ function renderCoin() {
   els.coinName.textContent = selectedCoin.name;
   els.coinSymbol.textContent = selectedCoin.symbol;
   els.coinPrice.textContent = fmtMoney(p.price);
-  els.coinChange.textContent = `24h ${fmtPct(p.change24h)} · 7d ${fmtPct(p.change7d)}`;
+  els.coinChange.textContent = isStock(state.selected)
+    ? `Today ${fmtPct(p.change24h)} · prev close ${fmtMoney(p.prevClose)}`
+    : `24h ${fmtPct(p.change24h)} · 7d ${fmtPct(p.change7d)}`;
   renderUpdated();
 }
 
@@ -692,7 +785,9 @@ function renderCoin() {
 function renderUpdated() {
   if (!selectedCoin || !prices[state.selected]) return;
   els.coinUpdated.replaceChildren();
-  if (liveHas(selectedCoin.symbol) && liveAt && Date.now() - liveAt.getTime() < 90 * 1000) {
+  if (isStock(state.selected)) {
+    els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)} · Finnhub, every 15s`;
+  } else if (liveHas(selectedCoin.symbol) && liveAt && Date.now() - liveAt.getTime() < 90 * 1000) {
     els.coinUpdated.appendChild(el("span", "", "live-dot"));
     els.coinUpdated.appendChild(document.createTextNode(`Live · Coinbase · ${timeAgo(liveAt)}`));
   } else {
@@ -716,10 +811,12 @@ function renderTape() {
     btn.appendChild(el("span", c.symbol, "sym"));
     btn.appendChild(el("span", q ? fmtMoney(q.price) : "—", "fig"));
     btn.appendChild(el("span", q ? fmtPct(q.change24h) : "", "fig " + (q ? upDown(q.change24h) : "")));
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("aria-hidden", "true");
-    btn.appendChild(svg);
-    drawSparkline(svg, c.spark);
+    if (c.spark.length) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("aria-hidden", "true");
+      btn.appendChild(svg);
+      drawSparkline(svg, c.spark);
+    }
     li.appendChild(btn);
     els.tape.appendChild(li);
   }
@@ -930,7 +1027,31 @@ function tradesCsv() {
   return [head, ...rows].map((r) => r.map(cell).join(",")).join("\n");
 }
 
+// The stock market's mood is the S&P 500's move today, from the tape quote.
+function stockMood() {
+  const spy = prices["stock:SPY"];
+  if (!spy || !Number.isFinite(spy.change24h)) return null;
+  const c = spy.change24h;
+  const label = c <= -1.5 ? "Selling off" : c < -0.5 ? "Down" : c > 1.5 ? "Rallying" : c > 0.5 ? "Up" : "Flat";
+  return { value: fmtPct(c), label, bad: c <= -1.5, good: c >= 1.5 };
+}
+
 function renderMood() {
+  if (state.market === "stocks") {
+    const m = stockMood();
+    els.moodSource.textContent = "S&P 500 today";
+    show(els.moodLoading, !m);
+    show(els.moodError, false);
+    show(els.moodBody, Boolean(m));
+    if (!m) return;
+    els.fngValue.textContent = m.value;
+    els.fngLabel.textContent = m.label;
+    els.fngValue.className = "mood-number fig " + (m.bad ? "down" : m.good ? "up" : "");
+    return;
+  }
+  els.moodSource.textContent = "Fear & Greed";
+  show(els.moodLoading, !mood);
+  show(els.moodBody, Boolean(mood));
   if (!mood) return;
   els.fngValue.textContent = mood.value;
   els.fngLabel.textContent = mood.label;
@@ -940,7 +1061,12 @@ function renderMood() {
 // The amber line under the Buy button. A warning never blocks.
 function moodWarning() {
   const parts = [];
-  if (mood && mood.value <= 25) parts.push(`Market is in ${mood.label} (${mood.value}).`);
+  if (isStock(state.selected)) {
+    const m = stockMood();
+    if (m && m.bad) parts.push(`The S&P 500 is ${m.value} today.`);
+  } else if (mood && mood.value <= 25) {
+    parts.push(`Market is in ${mood.label} (${mood.value}).`);
+  }
   const h = headlineMood();
   if (h && h.label === "negative") parts.push(`The news reads negative (${h.sum}).`);
   return parts.join(" ");
@@ -964,7 +1090,7 @@ function renderNews() {
   if (!newsFor) return; // empty, loading or error view is already up
   els.newsList.innerHTML = "";
   if (news.length === 0) {
-    els.newsList.appendChild(el("li", "No recent news about this coin.", "muted"));
+    els.newsList.appendChild(el("li", "No recent news about this one.", "muted"));
     return;
   }
   for (const a of news) {
@@ -1012,7 +1138,7 @@ els.searchForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const q = els.searchInput.value.trim();
   if (!q) {
-    els.searchMsg.textContent = "Type a coin name.";
+    els.searchMsg.textContent = state.market === "stocks" ? "Type a company or ticker." : "Type a coin name.";
     return;
   }
   searchCoins(q);
@@ -1025,6 +1151,23 @@ els.results.addEventListener("click", (e) => {
 });
 
 els.coinRetry.addEventListener("click", fetchPrices);
+
+function setMarket(market) {
+  state.market = market;
+  save();
+  for (const b of els.marketBtns) b.classList.toggle("active", b.dataset.market === market);
+  els.searchInput.placeholder = market === "stocks" ? "apple, NVDA, spy" : "bitcoin, eth, sol";
+  els.results.innerHTML = "";
+  els.searchMsg.textContent = "";
+  tape = [];
+  els.tape.replaceChildren(el("li", "Loading the tape…", "muted"));
+  fetchTape();
+  render();
+}
+
+for (const btn of els.marketBtns) {
+  btn.addEventListener("click", () => setMarket(btn.dataset.market));
+}
 
 els.tape.addEventListener("click", (e) => {
   const btn = e.target.closest(".tape-item");
@@ -1184,6 +1327,8 @@ els.newsRetry.addEventListener("click", fetchNews);
 // ---------- Start ----------
 
 load();
+for (const b of els.marketBtns) b.classList.toggle("active", b.dataset.market === state.market);
+els.searchInput.placeholder = state.market === "stocks" ? "apple, NVDA, spy" : "bitcoin, eth, sol";
 render();
 fetchPrices();
 fetchTape();
@@ -1191,6 +1336,7 @@ fetchMood();
 fetchNews();
 fetchChart();
 watchLive();
-setInterval(fetchPrices, 60 * 1000);
+setInterval(fetchCryptoPrices, 60 * 1000);
+setInterval(fetchStockPrices, 15 * 1000);
 setInterval(fetchTape, 60 * 1000);
 setInterval(renderUpdated, 1000);

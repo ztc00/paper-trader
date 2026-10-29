@@ -19,14 +19,20 @@
   </header>
 
   <section class="tape-wrap" aria-label="Top coins">
-    <ul class="tape" id="tape"><li class="muted">Loading the top coins…</li></ul>
+    <ul class="tape" id="tape"><li class="muted">Loading the tape…</li></ul>
   </section>
 
   <main class="layout">
     <div class="col left">
 
       <section class="block" aria-labelledby="h-search">
-        <h2 id="h-search">Find a coin</h2>
+        <div class="section-head">
+          <h2 id="h-search">Find a coin or stock</h2>
+          <div class="market" role="group" aria-label="Market">
+            <button type="button" class="quiet small market-btn active" data-market="crypto">Crypto</button>
+            <button type="button" class="quiet small market-btn" data-market="stocks">Stocks</button>
+          </div>
+        </div>
         <form id="search-form" novalidate>
           <div class="row">
             <label class="visually-hidden" for="search-input">Coin name</label>
@@ -40,7 +46,7 @@
 
       <section class="block coin" aria-labelledby="h-coin" aria-live="polite">
         <h2 id="h-coin">Coin</h2>
-        <p class="muted" id="coin-empty">Search a coin to start, like bitcoin or sol.</p>
+        <p class="muted" id="coin-empty">Search a coin to start, like bitcoin or sol, or pick one off the tape.</p>
         <p class="muted" id="coin-loading" hidden>Loading…</p>
         <p class="error" id="coin-error" hidden><span id="coin-error-text"></span> <button type="button" class="quiet small" id="coin-retry">Retry</button></p>
         <div id="coin-body" hidden>
@@ -106,7 +112,7 @@
         <p class="muted" id="mood-loading">Loading…</p>
         <p class="error" id="mood-error" hidden><span id="mood-error-text"></span> <button type="button" class="quiet small" id="mood-retry">Retry</button></p>
         <div class="mood" id="mood-body" hidden>
-          <p class="mood-fng"><span class="mood-number fig" id="fng-value"></span> <span id="fng-label"></span> <span class="muted">Fear &amp; Greed</span></p>
+          <p class="mood-fng"><span class="mood-number fig" id="fng-value"></span> <span id="fng-label"></span> <span class="muted" id="mood-source">Fear &amp; Greed</span></p>
           <p class="mood-news" id="headline-mood"><span class="muted">Headlines</span> <span class="fig" id="headline-score">—</span> <span id="headline-label"></span></p>
         </div>
       </section>
@@ -116,7 +122,7 @@
 
       <section class="block" aria-labelledby="h-news" aria-live="polite">
         <h2 id="h-news">News</h2>
-        <p class="muted" id="news-empty">Pick a coin to see its news.</p>
+        <p class="muted" id="news-empty">Pick a coin or stock to see its news.</p>
         <p class="muted" id="news-loading" hidden>Loading…</p>
         <p class="error" id="news-error" hidden><span id="news-error-text"></span> <button type="button" class="quiet small" id="news-retry">Retry</button></p>
         <ul class="news" id="news-list" hidden></ul>

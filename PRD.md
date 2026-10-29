@@ -108,6 +108,18 @@ Everything below is built on the same `state` and the same rules.
     the two can be compared. The model's answer is cached with the news for
     an hour. Without the key the headlines and my score still show.
 
+19. **Stocks.** A Crypto / Stocks toggle beside the search. On Stocks, the
+    search, tape, price, chart and news come from `api/stocks.js`, the second
+    function: Finnhub (key in Vercel as `FINNHUB_API_KEY`) for search, quotes
+    and company news, Twelve Data (`TWELVEDATA_API_KEY`) for price history.
+    Finnhub's live feed is not used because its key would have to sit in the
+    page, so stock quotes are polled every 15 seconds through the function
+    and the line under the price says so. The stock tape is ten fixed
+    tickers (SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AMD) with
+    today's move, no sparkline. A stock's id is `stock:AAPL`, so positions,
+    orders, the log and performance work across both markets in one
+    portfolio. Mood on Stocks is the S&P 500's move today from the SPY quote.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;
@@ -124,6 +136,11 @@ States for the new parts:
 - **Performance empty:** the curve is a flat line at the starting cash and the
   stats show "—" until there is a sell.
 - **AI read missing:** the block is hidden; the headlines and my score show.
+- **Stocks not set up:** without the Finnhub key, search, price and news say
+  "Stocks are not set up yet."; without the Twelve Data key the chart says
+  "Charts for stocks are not set up yet." and everything else works. An
+  unknown ticker: "Finnhub has no price for that symbol." Outside market
+  hours the price stands still and still says when it was last checked.
 
 ## Content and data
 
@@ -192,13 +209,13 @@ Follows DESIGN.md.
 
 ## Out of scope
 
-Real money, broker connections, logins, short selling, stocks (needs another
-keyed API). No frameworks, no libraries, nothing from a CDN.
+Real money, broker connections, logins, short selling, options. No
+frameworks, no libraries, nothing from a CDN.
 
 ## Later
 
-- Stocks through Finnhub, with a second function.
 - Short selling.
+- Live stock ticks, if a feed that works without exposing a key turns up.
 - Candlesticks instead of a line.
 - A watchlist of my own coins, not only the top 10.
 - Trailing stops.
