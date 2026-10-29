@@ -788,6 +788,20 @@ select:disabled { opacity: 0.4; }
 @media (max-width: 959px) {
   body { padding-bottom: 72px; }
   .toasts { bottom: 76px; }
+
+  /* One column, in the order a phone needs: search, asset, ticket, orders,
+     positions, trades, then the news. The two columns dissolve. */
+  .layout { display: flex; flex-direction: column; }
+  .col { display: contents; }
+  .search-block { order: 1; }
+  .coin { order: 2; }
+  .ticket-block { order: 3; }
+  .orders-block { order: 4; }
+  .positions-block { order: 5; }
+  .trades-block { order: 6; }
+  .news-block { order: 7; }
+
+  .tape-tabs .seg-btn { padding: 0 8px; font-size: 12px; height: 32px; }
 }
 
 /* Laptop */
