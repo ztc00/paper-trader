@@ -8,6 +8,7 @@
 //   /api/stocks?op=chart&symbol=AAPL&days=7
 //   /api/stocks?op=news&symbol=AAPL
 
+import https from "node:https";
 import { readHeadlines, cacheFor } from "./_read.js";
 
 const FINNHUB = "https://finnhub.io/api/v1";
@@ -126,28 +127,61 @@ async function news(symbol, key) {
   return json({ articles, brief, briefError: brief ? undefined : "unavailable" }, 200, cacheFor(brief, articles));
 }
 
-// The og:image of a page: the picture a link to it shows in a chat. Reads
-// only the first 120 KB and gives up after three seconds.
-async function previewImage(url) {
+// Only a public https page is worth opening: no plain http, no IP literal,
+// no local or internal names, no credentials, no odd port.
+function safeUrl(raw) {
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(3000), headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperTrader/1.0)" }, redirect: "follow" });
-    if (!r.ok) return null;
-    const reader = r.body.getReader();
-    let html = "", got = 0;
-    const decoder = new TextDecoder();
-    while (got < 120000) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      html += decoder.decode(value, { stream: true });
-      got += value.length;
-      if (/<\/head>/i.test(html)) break;
-    }
-    reader.cancel().catch(() => {});
-    const m = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
-    const img = m && m[1];
-    return img && /^https:\/\//.test(img) ? img : null;
+    const u = new URL(raw);
+    if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return null;
+    const h = u.hostname.toLowerCase();
+    if (/^[\d.]+$/.test(h) || h.includes(":") || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h) || !h.includes(".")) return null;
+    return u.href;
   } catch {
     return null;
   }
+}
+
+// The picture in a page's <meta og:image> tag, read once from the <head>.
+// Each tag is matched on its own with a bounded pattern, so a big page
+// cannot make the scan slow.
+function imageFromHead(html) {
+  for (const tag of html.match(/<meta\b[^>]{0,1000}>/gi) || []) {
+    if (!/(?:property|name)=["'](?:og:image|twitter:image)(?::src)?["']/i.test(tag)) continue;
+    const m = tag.match(/content=["']([^"']{1,2000})["']/i);
+    if (m && safeUrl(m[1])) return m[1];
+  }
+  return null;
+}
+
+// The og:image of a page: the picture a link to it shows in a chat. Uses
+// Node's https client because Yahoo's response headers are too big for
+// fetch. Follows up to five redirects, each checked, reads at most 400 KB,
+// stops at the end of <head>, and gives up after four seconds.
+function previewImage(rawUrl, hops = 0) {
+  return new Promise((resolve) => {
+    const url = safeUrl(rawUrl);
+    if (!url || hops > 5) return resolve(null);
+    let done = false, req = null;
+    const finish = (v) => { if (!done) { done = true; clearTimeout(timer); if (req) req.destroy(); resolve(v); } };
+    const timer = setTimeout(() => finish(null), 4000);
+    req = https.get(url, { maxHeaderSize: 262144, headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperTrader/1.0)", Accept: "text/html" } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        const next = safeUrl(new URL(res.headers.location, url).href);
+        done = true; clearTimeout(timer);
+        return next ? previewImage(next, hops + 1).then(resolve) : resolve(null);
+      }
+      if (res.statusCode !== 200 || !/text\/html/i.test(res.headers["content-type"] || "")) { res.resume(); return finish(null); }
+      const chunks = []; let size = 0;
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        chunks.push(chunk);
+        size += chunk.length;
+        if (chunk.includes("</head>") || size > 400000) finish(imageFromHead(chunks.join("").slice(0, 400000)));
+      });
+      res.on("end", () => finish(imageFromHead(chunks.join("").slice(0, 400000))));
+      res.on("error", () => finish(null));
+    });
+    req.on("error", () => finish(null));
+  });
 }
