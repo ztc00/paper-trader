@@ -11,11 +11,20 @@
 </head>
 <body>
   <header class="top">
-    <span class="brand">Paper Trader</span>
-    <p class="totals">
-      <span class="total fig" id="portfolio-total">$10,000.00</span>
-      <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
-    </p>
+    <a class="brand" href="index.html">Paper Trader</a>
+    <nav class="nav" aria-label="Pages">
+      <a href="index.html">Desk</a>
+      <a href="markets.html">Markets</a>
+      <a href="portfolio.html">Portfolio</a>
+      <a href="trades.html">Trades</a>
+    </nav>
+    <div class="top-right">
+      <p class="totals">
+        <span class="total fig" id="portfolio-total">$10,000.00</span>
+        <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
+      </p>
+      <button type="button" class="quiet theme-btn">Light</button>
+    </div>
   </header>
 
   <section class="tape-wrap" aria-label="Top coins">
@@ -209,6 +218,7 @@
     <button type="button" class="quiet danger" id="start-over">Start over</button>
   </footer>
 
+  <script src="js/shared.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/live.js"></script>
   <script src="js/app.js"></script>

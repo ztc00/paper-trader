@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markets · Paper Trader</title>
+  <meta name="description" content="The top 50 coins and the big US tickers at a glance. Pick one to trade it on the Desk.">
+  <meta name="theme-color" content="#0B0F0D">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B0F0D'/%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%233DF28A'/%3E%3Cpath d='M10 20 L15 14 L18 17 L23 11' fill='none' stroke='%2307110B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="index.html">Paper Trader</a>
+    <nav class="nav" aria-label="Pages">
+      <a href="index.html">Desk</a>
+      <a href="markets.html">Markets</a>
+      <a href="portfolio.html">Portfolio</a>
+      <a href="trades.html">Trades</a>
+    </nav>
+    <div class="top-right">
+      <p class="totals">
+        <span class="total fig" id="portfolio-total">$10,000.00</span>
+        <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
+      </p>
+      <button type="button" class="quiet theme-btn">Light</button>
+    </div>
+  </header>
+
+  <main class="page markets">
+    <div class="page-head">
+      <h1>Markets</h1>
+      <p class="muted" id="updated">Loading…</p>
+    </div>
+
+    <section class="block" aria-labelledby="h-coins">
+      <div class="section-head">
+        <h2 id="h-coins">Top 50 coins</h2>
+        <p class="muted">Click a row to trade it on the Desk.</p>
+      </div>
+      <p class="muted" id="coins-status">Loading…</p>
+      <div class="table-wrap">
+        <table class="grid" id="coins-table" hidden>
+          <thead>
+            <tr><th>#</th><th>Coin</th><th>Name</th><th>Price</th><th>24h</th><th>7d</th><th>Market cap</th><th>7 days</th></tr>
+          </thead>
+          <tbody id="coins-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="h-stocks">
+      <h2 id="h-stocks">US stocks and ETFs</h2>
+      <p class="muted" id="stocks-status">Loading…</p>
+      <div class="table-wrap">
+        <table class="grid" id="stocks-table" hidden>
+          <thead>
+            <tr><th></th><th>Ticker</th><th>Name</th><th>Price</th><th>Today</th><th>Prev close</th><th>Day range</th></tr>
+          </thead>
+          <tbody id="stocks-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/shared.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/markets.js"></script>
+</body>
+</html>

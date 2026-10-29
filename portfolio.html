@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portfolio · Paper Trader</title>
+  <meta name="description" content="What I hold, what it is worth, and how the paper portfolio has done.">
+  <meta name="theme-color" content="#0B0F0D">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B0F0D'/%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%233DF28A'/%3E%3Cpath d='M10 20 L15 14 L18 17 L23 11' fill='none' stroke='%2307110B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="index.html">Paper Trader</a>
+    <nav class="nav" aria-label="Pages">
+      <a href="index.html">Desk</a>
+      <a href="markets.html">Markets</a>
+      <a href="portfolio.html">Portfolio</a>
+      <a href="trades.html">Trades</a>
+    </nav>
+    <div class="top-right">
+      <p class="totals">
+        <span class="total fig" id="portfolio-total">$10,000.00</span>
+        <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
+      </p>
+      <button type="button" class="quiet theme-btn">Light</button>
+    </div>
+  </header>
+
+  <main class="page portfolio">
+    <div class="page-head">
+      <h1>Portfolio</h1>
+      <p class="muted" id="updated">Loading prices…</p>
+    </div>
+
+    <dl class="cards">
+      <div class="card"><dt>Total value</dt><dd class="fig" id="card-total">—</dd></div>
+      <div class="card"><dt>Cash</dt><dd class="fig" id="card-cash">—</dd></div>
+      <div class="card"><dt>Since start</dt><dd class="fig" id="card-since">—</dd></div>
+      <div class="card"><dt>Today, realized</dt><dd class="fig" id="card-today">—</dd></div>
+    </dl>
+
+    <section class="block" aria-labelledby="h-alloc">
+      <h2 id="h-alloc">Allocation</h2>
+      <p class="muted" id="alloc-empty">All cash. Nothing held yet.</p>
+      <div class="alloc" id="alloc" hidden>
+        <svg id="donut" role="img" aria-label="Share of the portfolio by holding"></svg>
+        <ul class="alloc-legend" id="legend"></ul>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="h-positions">
+      <h2 id="h-positions">Positions</h2>
+      <p class="muted" id="positions-empty">No positions yet.</p>
+      <div class="table-wrap">
+        <table class="grid" id="positions-table" hidden>
+          <thead>
+            <tr><th>Asset</th><th>Market</th><th>Units</th><th>Avg</th><th>Price</th><th>Today</th><th>Cost</th><th>Value</th><th>Weight</th><th>P&amp;L</th></tr>
+          </thead>
+          <tbody id="positions-body"></tbody>
+          <tfoot>
+            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="fig" id="positions-cost"></td><td class="fig" id="positions-value"></td><td></td><td class="fig" id="positions-pnl"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="h-orders">
+      <h2 id="h-orders">Pending orders</h2>
+      <p class="muted" id="orders-empty">No pending orders. Place them on the Desk.</p>
+      <ul class="orders" id="orders-list"></ul>
+    </section>
+
+    <section class="block" aria-labelledby="h-perf">
+      <h2 id="h-perf">Performance</h2>
+      <svg class="chart" id="equity" role="img" aria-label="Portfolio value over time"></svg>
+      <dl class="stats" id="stats"></dl>
+    </section>
+  </main>
+
+  <script src="js/shared.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/portfolio.js"></script>
+</body>
+</html>

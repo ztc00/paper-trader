@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trades · Paper Trader</title>
+  <meta name="description" content="Every paper trade, grouped by day, with filters and a CSV export.">
+  <meta name="theme-color" content="#0B0F0D">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B0F0D'/%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%233DF28A'/%3E%3Cpath d='M10 20 L15 14 L18 17 L23 11' fill='none' stroke='%2307110B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="index.html">Paper Trader</a>
+    <nav class="nav" aria-label="Pages">
+      <a href="index.html">Desk</a>
+      <a href="markets.html">Markets</a>
+      <a href="portfolio.html">Portfolio</a>
+      <a href="trades.html">Trades</a>
+    </nav>
+    <div class="top-right">
+      <p class="totals">
+        <span class="total fig" id="portfolio-total">$10,000.00</span>
+        <span class="pnl fig" id="portfolio-pnl">$0.00 (0.0%)</span>
+      </p>
+      <button type="button" class="quiet theme-btn">Light</button>
+    </div>
+  </header>
+
+  <main class="page trades-page">
+    <div class="page-head">
+      <h1>Trades</h1>
+      <p class="muted" id="summary"></p>
+    </div>
+
+    <div class="filters">
+      <label class="visually-hidden" for="filter-side">Side</label>
+      <select id="filter-side">
+        <option value="all">Buys and sells</option>
+        <option value="Buy">Buys</option>
+        <option value="Sell">Sells</option>
+      </select>
+      <label class="visually-hidden" for="filter-asset">Asset</label>
+      <select id="filter-asset"><option value="all">Every asset</option></select>
+      <label class="visually-hidden" for="filter-text">Search</label>
+      <input id="filter-text" type="search" placeholder="Search symbol or type">
+      <button type="button" class="quiet small" id="export-btn">Export CSV</button>
+    </div>
+
+    <p class="muted" id="trades-empty">No trades yet. Make one on the Desk.</p>
+    <div class="table-wrap">
+      <table class="grid" id="trades-table" hidden>
+        <thead>
+          <tr><th>Time</th><th>Side</th><th>Asset</th><th>Units</th><th>Price</th><th>Dollars</th><th>Realized</th></tr>
+        </thead>
+        <tbody id="trades-body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="js/shared.js"></script>
+  <script src="js/trades.js"></script>
+</body>
+</html>

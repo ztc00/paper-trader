@@ -120,6 +120,26 @@ Everything below is built on the same `state` and the same rules.
     orders, the log and performance work across both markets in one
     portfolio. Mood on Stocks is the S&P 500's move today from the SPY quote.
 
+20. **Pages.** Four pages share one saved state through `js/shared.js`:
+    the Desk (`index.html`), **Markets** (`markets.html`: the top 50 coins
+    with sparklines and the big US tickers, click a row to trade it on the
+    Desk), **Portfolio** (`portfolio.html`: value, cash, since-start and
+    today's realized cards, an allocation donut, every position with cost,
+    weight, today's move and P&L, pending orders, and the performance panel),
+    and **Trades** (`trades.html`: the whole log grouped by day with a total
+    per day, filters by side, asset and text, and the CSV export). The header
+    on every page carries the nav and the portfolio total. A change on one
+    page reaches the others through the browser's storage event, so two tabs
+    stay in step.
+21. **Light and dark.** A button in the header. The first visit follows the
+    system setting; the choice is saved on its own key so Start over never
+    touches it. Charts redraw in the new colors.
+22. **Charts, second pass.** Drawn at the element's real pixel width, so
+    text and strokes are the same size on every screen, and redrawn on
+    resize. Smooth lines, a faded area under them, the values in a right
+    gutter, a dashed line and tag at the last value, a dashed baseline at
+    the starting cash on the equity curve, and a boxed readout on hover.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;
@@ -136,6 +156,12 @@ States for the new parts:
 - **Performance empty:** the curve is a flat line at the starting cash and the
   stats show "—" until there is a sell.
 - **AI read missing:** the block is hidden; the headlines and my score show.
+- **Portfolio empty:** "All cash. Nothing held yet." and "No positions yet."
+  with the cards still showing cash and the total. **Trades empty:** "No
+  trades yet. Make one on the Desk." and the filters hidden. **Markets
+  loading / error:** "Loading…" under each heading, then the table, or a
+  red line saying which source did not load, and the other table still
+  works.
 - **Stocks not set up:** without the Finnhub key, search, price and news say
   "Stocks are not set up yet."; without the Twelve Data key the chart says
   "Charts for stocks are not set up yet." and everything else works. An

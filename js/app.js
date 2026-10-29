@@ -1,108 +1,20 @@
-// Paper Trader. Everything saved lives in `state`. Every change goes through a
-// function that updates it, saves, and calls render().
-
-const STORAGE_KEY = "paper-trader-v1";
-const COINGECKO = "https://api.coingecko.com/api/v3";
-
-const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500, riskPct: 1, stopPct: 5 };
-
-// Ten big US tickers for the stock tape. Finnhub has no "top 10" endpoint.
-const STOCK_TAPE = [
-  ["SPY", "S&P 500 ETF"], ["QQQ", "Nasdaq 100 ETF"], ["AAPL", "Apple"], ["MSFT", "Microsoft"], ["NVDA", "NVIDIA"],
-  ["AMZN", "Amazon"], ["GOOGL", "Alphabet"], ["META", "Meta"], ["TSLA", "Tesla"], ["AMD", "AMD"],
-];
-
-// Stocks and coins share one id space. A coin id is CoinGecko's slug, like
-// "bitcoin"; a stock id is "stock:AAPL". Everything saved keys off the id.
-function isStock(id) {
-  return typeof id === "string" && id.startsWith("stock:");
-}
-
-function stockSymbol(id) {
-  return id.slice(6);
-}
-
-let state = {
-  cash: DEFAULT_RULES.startingCash,
-  positions: [], // { id, name, symbol, units, avgPrice }
-  trades: [],    // { id, time, coinId, symbol, side, units, price, dollars, realized }
-  rules: { ...DEFAULT_RULES },
-  selected: null, // the coin id, like "bitcoin"
-  orders: [],     // { id, coinId, symbol, name, type, price, dollars, created }
-  equity: [],     // [[timeMs, portfolioValue], ...] for the performance chart
-  market: "crypto", // which tab the search and tape show: "crypto" or "stocks"
-};
+// The desk, index.html. The saved state, formatting and helpers come from
+// js/shared.js; the charts from js/charts.js; live ticks from js/live.js.
+// Every change goes through a function that updates `state`, saves, and
+// calls render().
 
 // Fetched, not saved.
-let prices = {};      // id -> { price, change24h, change7d } (stocks: change24h is today's move, change7d null)
-let selectedCoin = null; // { id, name, symbol }
 let lastPriceAt = null;
 let mood = null;   // { value, label } from the Fear & Greed index
 let news = [];     // [{ title, url, source, publishedAt }] for the selected coin
-let newsFor = null; // which coin id the news is for
+let newsFor = null; // which id the news is for
 let brief = null;   // { text, sentiment, model } the model's read of the news, or null
 let tape = [];     // the tape on screen: top 10 coins with sparklines, or the ten stocks
 let liveAt = null; // when the last live tick arrived
 let chart = { days: 7, points: [], forId: null }; // the price chart on screen
 const chartCache = {}; // "bitcoin:7" -> { points, at }
 
-// ---------- Save and load ----------
-
-function load() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved) {
-      state.cash = Number.isFinite(saved.cash) ? saved.cash : state.cash;
-      state.positions = Array.isArray(saved.positions) ? saved.positions : [];
-      state.trades = Array.isArray(saved.trades) ? saved.trades : [];
-      state.rules = { ...DEFAULT_RULES, ...saved.rules };
-      state.orders = Array.isArray(saved.orders) ? saved.orders : [];
-      state.equity = Array.isArray(saved.equity) ? saved.equity : [];
-      state.selected = saved.selected || null;
-      state.market = saved.market === "stocks" ? "stocks" : "crypto";
-      selectedCoin = saved.selectedCoin || null;
-    }
-  } catch {
-    // Broken or blocked storage: start from the defaults.
-  }
-}
-
-function save() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, selectedCoin }));
-  } catch {
-    // Storage blocked. The page still works until a refresh.
-  }
-}
-
-// ---------- Formatting ----------
-
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-
-function fmtMoney(n) {
-  return money.format(n);
-}
-
-function fmtSigned(n) {
-  return (n > 0 ? "+" : "") + money.format(n);
-}
-
-function fmtPct(n) {
-  if (!Number.isFinite(n)) return "—";
-  return (n > 0 ? "+" : "") + n.toFixed(2) + "%";
-}
-
-function fmtUnits(n) {
-  return n >= 1 ? n.toFixed(4) : n.toPrecision(4);
-}
-
-function upDown(n) {
-  return n > 0 ? "up" : n < 0 ? "down" : "";
-}
-
 // ---------- Elements ----------
-
-const $ = (id) => document.getElementById(id);
 
 const els = {
   total: $("portfolio-total"),
@@ -188,24 +100,6 @@ const els = {
   marketBtns: document.querySelectorAll(".market-btn"),
   moodSource: $("mood-source"),
 };
-
-function show(el, on) {
-  el.hidden = !on;
-}
-
-// Text from an API goes in through textContent, never innerHTML.
-function el(tag, text, className) {
-  const node = document.createElement(tag);
-  if (text != null) node.textContent = text;
-  if (className) node.className = className;
-  return node;
-}
-
-function row(cells) {
-  const tr = document.createElement("tr");
-  for (const c of cells) tr.appendChild(Array.isArray(c) ? el("td", c[0], c[1]) : el("td", c));
-  return tr;
-}
 
 // ---------- Fetching prices ----------
 
@@ -607,11 +501,6 @@ function cancelOrder(id) {
   render();
 }
 
-// Portfolio value right now, for the header and the equity curve.
-function portfolioTotal() {
-  return state.cash + state.positions.reduce((sum, p) => sum + positionValue(p), 0);
-}
-
 // One point per minute at most, plus one on every trade. Capped at 1,000
 // points by dropping every other old point, so the curve never grows forever.
 function recordEquity(force) {
@@ -752,17 +641,6 @@ function flashPrice(before) {
   setTimeout(() => els.coinPrice.classList.remove(cls), 300);
 }
 
-function timeAgo(date) {
-  if (!date) return "";
-  const s = Math.round((Date.now() - date.getTime()) / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 48) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
 function renderCoin() {
   if (!state.selected) {
     setCoinView("empty");
@@ -841,6 +719,7 @@ function renderChart() {
     return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
   };
   drawLineChart(els.chart, points, {
+    height: 260,
     markers,
     fmt: (v) => fmtMoney(v),
     fmtTime,
@@ -911,56 +790,17 @@ function renderOrders() {
   }
 }
 
-function maxDrawdown(points) {
-  let peak = -Infinity, worst = 0;
-  for (const [, v] of points) {
-    if (v > peak) peak = v;
-    const dd = peak > 0 ? (peak - v) / peak : 0;
-    if (dd > worst) worst = dd;
-  }
-  return worst * 100;
-}
-
 function renderPerformance() {
-  const sells = state.trades.filter((t) => t.side === "Sell" && t.realized != null);
-  const wins = sells.filter((t) => t.realized > 0);
-  const losses = sells.filter((t) => t.realized < 0);
-  const sum = (arr) => arr.reduce((a, t) => a + t.realized, 0);
-  const realized = sum(sells);
-  const unrealized = state.positions.reduce((a, p) => a + positionValue(p) - p.units * p.avgPrice, 0);
-  const grossWin = sum(wins), grossLoss = Math.abs(sum(losses));
-  const best = sells.length ? Math.max(...sells.map((t) => t.realized)) : null;
-  const worst = sells.length ? Math.min(...sells.map((t) => t.realized)) : null;
-  const items = [
-    ["Realized P&L", fmtSigned(realized), upDown(realized)],
-    ["Unrealized P&L", fmtSigned(unrealized), upDown(unrealized)],
-    ["Win rate", sells.length ? `${Math.round((wins.length / sells.length) * 100)}% of ${sells.length}` : "—"],
-    ["Avg win", wins.length ? fmtSigned(grossWin / wins.length) : "—", "up"],
-    ["Avg loss", losses.length ? fmtSigned(-grossLoss / losses.length) : "—", "down"],
-    ["Profit factor", grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : wins.length ? "∞" : "—"],
-    ["Best trade", best == null ? "—" : fmtSigned(best), best == null ? "" : upDown(best)],
-    ["Worst trade", worst == null ? "—" : fmtSigned(worst), worst == null ? "" : upDown(worst)],
-    ["Max drawdown", state.equity.length > 1 ? `${maxDrawdown(state.equity).toFixed(1)}%` : "—"],
-  ];
-  els.stats.replaceChildren();
-  for (const [label, value, cls] of items) {
-    const div = document.createElement("div");
-    div.appendChild(el("dt", label));
-    div.appendChild(el("dd", value, "fig " + (cls || "")));
-    els.stats.appendChild(div);
-  }
+  renderStats(els.stats);
   const points = state.equity.slice();
   points.push([Date.now(), portfolioTotal()]);
   drawLineChart(els.equity, points, {
+    height: 180,
+    baseline: state.rules.startingCash,
     fmt: (v) => fmtMoney(v),
     fmtTime: (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
   });
-}
-
-function positionValue(p) {
-  const q = prices[p.id];
-  return q ? p.units * q.price : p.units * p.avgPrice;
 }
 
 function renderPortfolio() {
@@ -1003,11 +843,8 @@ function renderTrades() {
   show(els.tradesTable, any);
   els.tradesBody.innerHTML = "";
   for (const t of state.trades) {
-    const when = new Date(t.time);
-    const time = when.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
-      when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     els.tradesBody.appendChild(row([
-      time, [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
+      fmtWhen(t.time), [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
       t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
     ]));
   }
@@ -1323,6 +1160,15 @@ els.rulesBox.addEventListener("toggle", () => {
 els.startOver.addEventListener("click", startOver);
 els.moodRetry.addEventListener("click", fetchMood);
 els.newsRetry.addEventListener("click", fetchNews);
+
+// Charts are drawn at pixel size, so redraw when the window changes.
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { renderChart(); renderPerformance(); }, 150);
+});
+document.addEventListener("theme-changed", () => { renderChart(); renderPerformance(); });
+document.addEventListener("state-changed", () => { render(); fetchPrices(); watchLive(); });
 
 // ---------- Start ----------
 

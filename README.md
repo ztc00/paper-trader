@@ -24,6 +24,12 @@ trades marked on it; limit, stop-loss and take-profit orders that fill on the
 live price; a performance panel with an equity curve, win rate, profit factor
 and max drawdown; and a CSV export of the log.
 
+There are four pages, all on the same saved state: the **Desk** for trading,
+**Markets** for the top 50 coins and the big US tickers, **Portfolio** for
+what you hold with an allocation donut and the performance panel, and
+**Trades** for the whole log grouped by day with filters and the CSV export.
+Light and dark mode, from the button in the header.
+
 Two more things sit next to the price. The Crypto Fear & Greed Index says what
 mood the whole market is in. And the five latest headlines about the coin get
 a sentiment score from my own word lists, so the page can tell you the news
@@ -76,8 +82,10 @@ its own sentiment, shown beside mine so the two can be compared.
 5. Place an **order** instead of trading now: buy when the price drops to a
    level, or sell all if it falls to a stop or rises to a target. It fills
    on the live price and shows up in the log with its type.
-6. Read **Performance** for the equity curve and the numbers behind it, and
-   **Export CSV** to take the log elsewhere.
+6. Read **Performance** for the equity curve and the numbers behind it, or
+   open **Portfolio** for the allocation and every position in detail, and
+   **Trades** for the log by day and the CSV export. **Markets** lists the
+   top 50 coins and the big tickers; click one to trade it.
 7. **Edit** the rules at the bottom: starting cash, max trades a day, daily
    loss limit, risk per trade and stop distance. **Start over** puts cash
    back and clears positions, orders and trades.
@@ -88,8 +96,12 @@ its own sentiment, shown beside mine so the two can be compared.
 - `PRD.md`: the plan in detail, with every state of the page.
 - `DESIGN.md`: colors, type and layout. The CSS only uses values from it.
 - `AGENTS.md`: the rules the agent follows.
-- `index.html`, `css/styles.css`, `js/app.js`: the page. Everything saved
-  lives in `state` in `js/app.js`.
+- `index.html`, `js/app.js`: the Desk. `markets.html`, `portfolio.html`,
+  `trades.html` with their own scripts: the other pages.
+- `js/shared.js`: the saved `state`, load and save, formatting, prices for
+  any list of ids, the theme and the nav. Every page loads it first.
+- `css/styles.css`: the styles, with the light palette under
+  `[data-theme="light"]`.
 - `js/live.js`: the Coinbase ticker feed, with reconnects.
 - `js/charts.js`: the price chart, the equity curve and the sparklines, as
   inline SVG.

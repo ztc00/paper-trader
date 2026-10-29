@@ -13,6 +13,18 @@ colors:
   down: "#FF4B3E"
   warn: "#FFB01F"
   on-up: "#07110B"
+light:
+  bg: "#F5F7F6"
+  surface: "#FFFFFF"
+  well: "rgba(0, 0, 0, 0.04)"
+  edge: "rgba(0, 0, 0, 0.18)"
+  hairline: "rgba(0, 0, 0, 0.08)"
+  text: "#121816"
+  text-muted: "#5E6B66"
+  up: "#0F9F5A"
+  down: "#D93B2F"
+  warn: "#B9770E"
+  on-up: "#FFFFFF"
 typography:
   price:
     fontFamily: '"DIN Alternate", Bahnschrift, system-ui, sans-serif'
@@ -122,6 +134,11 @@ two tools read as one set.
 
 ## Colors
 
+Two palettes, the same roles. Dark is the desk at night, the default. Light
+keeps every role and swaps the values under `light`, with a deeper green and
+red so they still pass on white. The button in the header switches; the first
+visit follows the system.
+
 - **bg** is the page. **surface** is one step lighter, for the folded rules
   box and the result buttons when open.
 - **well** and **edge** are input fills and borders. **hairline** divides
@@ -215,13 +232,27 @@ Every control is 6px rounded. Tables and sections are square.
   in bold, the live price and 24h change in figures, and a 60×20 sparkline
   in up or down. The selected coin gets a green border. Scrolls sideways on
   a phone, no wrap.
-- **Chart (v2):** inline SVG, 600×220 units, full width. The line is up or
-  down by whether the range ended higher than it started, with the same
-  color under it at 12% for the area. Three faint grid lines with the price
-  in muted 11px figures, three time labels along the bottom. My buys are
+- **Chart (v2, redrawn in v3):** inline SVG at the element's real pixel
+  width, 260px tall for the price, 180 to 220 for the equity curve. The
+  line is smooth, 2px, up or down by whether the range ended above where it
+  started (or above the starting cash on the equity curve), with a fade of
+  the same color under it, 28% to 0. Four faint grid lines, their values in
+  muted 11px figures in a 74px gutter on the right. A dashed line at the
+  last value with a solid tag of the line color in the gutter. On the
+  equity curve a dotted muted baseline at the starting cash. My buys are
   green dots, sells red dots, with a page-colored ring. Hover draws an edge
-  line and a readout in figures. Range buttons are quiet, small, the active
-  one green.
+  line, a dot, and a readout in a surface-colored box with an edge border.
+  Range buttons are quiet, small, the active one green.
+- **Nav (v3):** in the header between the name and the totals, four small
+  muted links with a 6px rounded border that appears on hover; the current
+  page is green. The theme button sits after the totals.
+- **Cards (v3):** on the Portfolio page, four surface-colored boxes with a
+  hairline border: a muted label and a 24px figure. Four across on a laptop,
+  two on a phone.
+- **Donut (v3):** a ring 18px thick, one color per holding from a fixed set
+  of six, cash in muted, with a legend beside it.
+- **Markets tables (v3):** the same grid as the desk; rows are clickable and
+  take the well color on hover.
 - **Live dot (v2):** an 8px green dot before "Live · Coinbase".
 - **Orders (v2):** a select, a price well and a dollars well on one row with
   a quiet Place button; pending orders as plain rows with an underlined
