@@ -173,6 +173,7 @@ async function fetchPrices() {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
     const data = await response.json();
+    const before = prices[state.selected] ? prices[state.selected].price : null;
     for (const c of data) {
       prices[c.id] = {
         price: c.current_price,
@@ -182,6 +183,7 @@ async function fetchPrices() {
     }
     lastPriceAt = new Date();
     render();
+    flashPrice(before);
   } catch (err) {
     if (firstTime) {
       setCoinView("error", "Could not reach CoinGecko. Check your connection and retry.");
@@ -238,6 +240,7 @@ function selectCoin(coin) {
   els.searchInput.value = "";
   render();
   fetchPrices();
+  fetchNews();
 }
 
 // ---------- Mood: the Crypto Fear & Greed Index ----------
@@ -428,6 +431,16 @@ function setCoinView(which, message) {
   show(els.coinError, which === "error");
   show(els.coinBody, which === "body");
   if (message) els.coinErrorText.textContent = message;
+}
+
+// The price flashes green or red for 300ms when a refresh moved it.
+function flashPrice(before) {
+  const now = prices[state.selected] ? prices[state.selected].price : null;
+  if (before == null || now == null || now === before) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cls = now > before ? "flash-up" : "flash-down";
+  els.coinPrice.classList.add(cls);
+  setTimeout(() => els.coinPrice.classList.remove(cls), 300);
 }
 
 function timeAgo(date) {
