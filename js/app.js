@@ -101,12 +101,16 @@ const els = {
   briefSentiment: $("brief-sentiment"),
   briefCompare: $("brief-compare"),
   tape: $("tape"),
+  tapeClone: $("tape-clone"),
+  marquee: $("marquee"),
   tapeTabs: document.querySelectorAll(".tape-tabs .seg-btn"),
+  rangeChange: $("range-change"),
+  starText: $("star-text"),
+  mBuy: $("m-buy"),
+  mSell: $("m-sell"),
   chart: $("chart"),
   chartStatus: $("chart-status"),
   ranges: document.querySelectorAll(".range"),
-  equity: $("equity"),
-  stats: $("stats"),
   exportBtn: $("export-btn"),
   marketBtns: document.querySelectorAll(".market-btn"),
 };
@@ -726,7 +730,7 @@ function renderCoin() {
   els.coinName.textContent = selectedCoin.name;
   els.coinSymbol.textContent = selectedCoin.symbol;
   const watched = state.watchlist.some((w) => w.id === state.selected);
-  els.starBtn.textContent = watched ? "★ Watching" : "☆ Watch";
+  els.starText.textContent = watched ? "Watching" : "Watch";
   els.starBtn.setAttribute("aria-pressed", String(watched));
   els.coinPrice.textContent = fmtMoney(p.price);
   els.coinChange.textContent = isStock(state.selected)
@@ -781,6 +785,11 @@ function renderTape() {
     li.appendChild(btn);
     els.tape.appendChild(li);
   }
+  // The second copy makes the loop seamless. Four seconds per item; a short
+  // list does not move at all.
+  els.tapeClone.replaceChildren(...[...els.tape.children].map((li) => li.cloneNode(true)));
+  els.marquee.classList.toggle("static", items.length < 4);
+  els.marquee.style.setProperty("--tape-duration", `${Math.max(20, items.length * 4)}s`);
 }
 
 function renderChart() {
@@ -791,6 +800,10 @@ function renderChart() {
   const points = chart.points.slice();
   const q = prices[state.selected];
   if (q) points.push([Date.now(), q.price]); // the live price is the last point
+  // The move over the range, beside the range buttons.
+  const move = ((points[points.length - 1][1] - points[0][1]) / points[0][1]) * 100;
+  els.rangeChange.textContent = fmtPct(move);
+  els.rangeChange.className = "fig range-change " + upDown(move);
   const markers = state.trades
     .filter((t) => t.coinId === state.selected)
     .map((t) => ({ t: new Date(t.time).getTime(), price: t.price, side: t.side }));
@@ -807,21 +820,6 @@ function renderChart() {
     markers,
     fmt: (v) => fmtMoney(v),
     fmtTime,
-    fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
-  });
-}
-
-function renderPerformance() {
-  renderStats(els.stats);
-  const points = state.equity.slice();
-  points.push([Date.now(), portfolioTotal()]);
-  // Before anything happened, a flat line at the starting cash.
-  if (points.length < 2) points.unshift([Date.now() - 60 * 1000, state.rules.startingCash]);
-  drawLineChart(els.equity, points, {
-    height: 180,
-    baseline: state.rules.startingCash,
-    fmt: (v) => fmtMoney(v),
-    fmtTime: (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
   });
 }
@@ -1021,7 +1019,7 @@ function renderTrades() {
   show(els.tradesEmpty, !any);
   show(els.tradesTable, any);
   els.tradesBody.replaceChildren();
-  for (const t of state.trades.slice(0, 50)) {
+  for (const t of state.trades.slice(0, 5)) {
     els.tradesBody.appendChild(row([
       fmtWhen(t.time), [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
       t.fee ? fmtMoney(t.fee) : "", t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
@@ -1142,7 +1140,6 @@ function render() {
   renderRules();
   renderTape();
   renderChart();
-  renderPerformance();
 }
 
 // ---------- Events ----------
@@ -1182,7 +1179,7 @@ for (const btn of els.marketBtns) {
   btn.addEventListener("click", () => setMarket(btn.dataset.market));
 }
 
-els.tape.addEventListener("click", (e) => {
+els.marquee.addEventListener("click", (e) => {
   const btn = e.target.closest(".tape-item");
   if (!btn) return;
   selectCoin({ id: btn.dataset.id, name: btn.dataset.name, symbol: btn.dataset.symbol });
@@ -1289,10 +1286,6 @@ els.positionsBody.addEventListener("click", (e) => {
   if (btn) closePosition(btn.dataset.id);
 });
 
-els.exportBtn.addEventListener("click", () => {
-  location.href = "trades.html";
-});
-
 // [key, input, message, whole number?, allow zero?]
 const RULE_FIELDS = [
   ["startingCash", els.ruleCash, $("rule-cash-msg"), true, false],
@@ -1335,7 +1328,48 @@ els.rulesBox.addEventListener("toggle", () => {
   els.rulesBox.querySelector(".summary-action").textContent = els.rulesBox.open ? "Close" : "Edit";
 });
 
-els.startOver.addEventListener("click", startOver);
+// Start over asks once: the first click arms it for four seconds.
+let startOverArmed = null;
+els.startOver.addEventListener("click", () => {
+  if (startOverArmed) {
+    clearTimeout(startOverArmed);
+    startOverArmed = null;
+    els.startOver.textContent = "Start over";
+    startOver();
+    toast("Fresh start: cash back to the starting amount, everything else cleared.", "warn");
+    return;
+  }
+  els.startOver.textContent = "Click again to wipe everything";
+  startOverArmed = setTimeout(() => { startOverArmed = null; els.startOver.textContent = "Start over"; }, 4000);
+});
+
+// Keys: "/" goes to search, Esc closes the matches or backs out of a review.
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if (e.key === "/" && !typing) {
+    e.preventDefault();
+    els.searchInput.focus();
+  } else if (e.key === "Escape") {
+    if (els.results.children.length) { els.results.innerHTML = ""; els.searchMsg.textContent = ""; }
+    else if (ticket.reviewing) { ticket.reviewing = false; renderTicket(); }
+  }
+});
+
+// A click anywhere else closes the matches.
+document.addEventListener("click", (e) => {
+  if (!els.searchForm.contains(e.target) && els.results.children.length) els.results.innerHTML = "";
+});
+
+// Phone: the bar at the bottom sets the side and brings the ticket up.
+for (const [btn, side] of [[els.mBuy, "Buy"], [els.mSell, "Sell"]]) {
+  btn.addEventListener("click", () => {
+    ticket.side = side;
+    ticket.reviewing = false;
+    renderTicket();
+    els.ticket.scrollIntoView({ behavior: "smooth", block: "start" });
+    els.tQty.focus({ preventScroll: true });
+  });
+}
 els.moodRetry.addEventListener("click", fetchMood);
 els.newsRetry.addEventListener("click", fetchNews);
 
@@ -1343,9 +1377,9 @@ els.newsRetry.addEventListener("click", fetchNews);
 let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { renderChart(); renderPerformance(); }, 150);
+  resizeTimer = setTimeout(renderChart, 150);
 });
-document.addEventListener("theme-changed", () => { renderChart(); renderPerformance(); });
+document.addEventListener("theme-changed", renderChart);
 document.addEventListener("state-changed", () => { render(); fetchPrices(); watchLive(); });
 
 // ---------- Start ----------

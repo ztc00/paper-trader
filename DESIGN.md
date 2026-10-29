@@ -169,8 +169,8 @@ Windows, system fonts otherwise.
 
 ## Layout
 
-A thin header: the name on the left, the portfolio value and total P&L on the
-right.
+A thin header: the name on the left, the nav in the middle, the portfolio
+value, total P&L and the theme button on the right.
 
 Phone, one column, 20px gutters: search, the selected coin with its price,
 the two trade forms stacked, the mood line, the five headlines, cash and the
@@ -178,9 +178,15 @@ portfolio table, the trades log, My rules folded, Start over. First thing
 seen: the price. Second: the portfolio value. Third: the search box. Nothing
 is hidden behind a tab.
 
-Laptop, 960px and up: two columns inside 1200px. Left, 40%: search, the coin,
-trade, mood. Right, 60%: news, portfolio, trades. Rules and Start over sit on
-one footer row across both columns. The page scrolls normally.
+Laptop, 960px and up (v5): two columns inside 1200px. Left, 60%, is for
+looking: search, the asset with its chart, the news. Right, 40%, is for
+doing: the order ticket, working orders, positions, the last five trades.
+The right column sticks to the top of the window and scrolls inside itself,
+so the ticket never leaves reach. Rules, with Save and Start over, fold in
+the footer.
+
+Phone (v5): one column, then a fixed Buy / Sell bar along the bottom that
+brings the ticket up.
 
 ## Icon
 
@@ -228,10 +234,12 @@ Every control is 6px rounded. Tables and sections are square.
   between rows, P&L cells colored up or down. A total row in bold.
 - **Rules:** folded behind one line that says them in words, with Edit, like
   Trade Check.
-- **Tape (v2):** one strip under the header, items 40px tall with the symbol
-  in bold, the live price and 24h change in figures, and a 60×20 sparkline
-  in up or down. The selected coin gets a green border. Scrolls sideways on
-  a phone, no wrap.
+- **Tape (v2, a carousel in v5):** one strip under the header, items 40px
+  tall with the symbol in bold, the live price and 24h change in figures,
+  and a 60×20 sparkline in up or down. The selected asset gets a green
+  border. The strip slides left on its own, four seconds per item, fading at
+  both edges, and pauses under the pointer. A Top 10 / Watchlist segment
+  sits fixed at its left.
 - **Chart (v2, redrawn in v3):** inline SVG at the element's real pixel
   width, 260px tall for the price, 180 to 220 for the equity curve. The
   line is smooth, 2px, up or down by whether the range ended above where it

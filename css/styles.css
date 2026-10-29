@@ -22,7 +22,7 @@
   --large: 20px;
   --total: 24px;
   --mood: 40px;
-  --price: clamp(44px, 9vw, 64px);
+  --price: clamp(34px, 5vw, 44px);
 
   --unit: 8px;
   --gutter: 20px;
@@ -144,17 +144,45 @@ body {
   margin: 0 auto;
   padding: 0 var(--gutter);
   border-bottom: 1px solid var(--hairline);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
+
+/* The carousel: two identical lists side by side, both sliding left by
+   their own width, so when the first leaves the second is exactly where it
+   was. Pauses under the pointer. Off for reduced motion, where it scrolls
+   by hand instead. */
+.marquee {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+
+.marquee:hover .tape, .marquee:focus-within .tape { animation-play-state: paused; }
 
 .tape {
   list-style: none;
   margin: 0;
-  padding: 10px 0;
+  padding: 10px 6px 10px 0;
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
   min-width: max-content;
+  animation: tape var(--tape-duration, 60s) linear infinite;
+}
+
+.marquee.static .tape { animation: none; }
+.marquee.static .tape-clone { display: none; }
+.marquee.static { overflow-x: auto; mask-image: none; }
+
+@keyframes tape {
+  to { transform: translateX(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee .tape { animation: none; }
+  .marquee .tape-clone { display: none; }
+  .marquee { overflow-x: auto; mask-image: none; }
 }
 
 .tape-item {
@@ -346,16 +374,27 @@ label {
 
 /* Search results */
 
+.search-block form { position: relative; }
+
 .results {
   list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
+  margin: 0;
+  padding: 6px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--control) + 6px);
+  z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: var(--unit);
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
-.results:empty { margin: 0; }
+.results:empty { display: none; }
 
 .result {
   width: 100%;
@@ -374,7 +413,15 @@ label {
 
 /* Coin */
 
+.coin-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .coin-name { font-size: var(--large); }
+.coin-price-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+.coin-price-row .price { margin: 0; }
+.range-change { font-size: var(--small); margin-left: 6px; align-self: center; }
+.mood-line { font-size: var(--small); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; margin-bottom: 12px; }
+.mood-line .fig { font-size: var(--body); }
+.link { color: var(--text-muted); text-decoration: underline; font-size: var(--small); }
+.link:hover { color: var(--text); }
 
 .price {
   font-size: var(--price);
@@ -409,8 +456,8 @@ label .seg { margin-left: 8px; vertical-align: middle; }
 .ticket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
 .ticket-grid .field.wide { grid-column: 1 / -1; }
 .ticket-grid select, .ticket-grid input { width: 100%; }
-.presets { display: flex; gap: 4px; flex-shrink: 0; }
-.presets button { height: var(--control); padding: 0 9px; }
+.presets { display: flex; gap: 4px; margin-top: 6px; }
+.presets button { flex: 1; height: 36px; padding: 0; }
 
 .estimate {
   display: grid;
@@ -446,8 +493,10 @@ label .seg { margin-left: 8px; vertical-align: middle; }
 .steps { margin: 8px 0 0; padding-left: 20px; font-size: var(--small); color: var(--text-muted); }
 .steps li { margin-bottom: 4px; }
 
-.star { height: 26px; padding: 0 8px; font-size: 13px; vertical-align: middle; margin-left: 6px; }
+.star { height: 32px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.star-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 .star[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); }
+.star[aria-pressed="true"] .star-icon { fill: currentColor; }
 
 .tape-row { display: flex; align-items: center; gap: 12px; }
 .tape-tabs { flex-shrink: 0; }
@@ -716,15 +765,51 @@ select:disabled { opacity: 0.4; }
 }
 
 .rule input { width: 100%; }
+.rule-actions { display: flex; gap: 8px; align-items: flex-end; }
+.rule-actions button { flex: 1; }
+
+/* Phone: a fixed Buy / Sell bar that jumps to the ticket */
+.mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--gutter);
+  background: var(--bg);
+  border-top: 1px solid var(--edge);
+  z-index: 8;
+}
+
+.mobile-bar button { flex: 1; font-weight: 700; }
+.mobile-bar .sell { background: var(--down); color: #FFFFFF; }
+
+@media (max-width: 959px) {
+  body { padding-bottom: 72px; }
+  .toasts { bottom: 76px; }
+}
 
 /* Laptop */
 
 @media (min-width: 960px) {
   .layout {
     display: grid;
-    grid-template-columns: 2fr 3fr;
+    grid-template-columns: 3fr 2fr;
     column-gap: 40px;
+    align-items: start;
   }
+
+  .col.right {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+  }
+
+  .mobile-bar { display: none; }
 
   .forms { flex-direction: row; }
   .forms form { flex: 1; }
@@ -737,8 +822,7 @@ select:disabled { opacity: 0.4; }
   .foot { flex-direction: row; justify-content: space-between; align-items: flex-start; }
   .rules-box { flex: 1; }
   .rules { grid-template-columns: repeat(4, 1fr); align-items: end; }
-  .rules button { grid-column: 4; }
-  .estimate { grid-template-columns: repeat(4, 1fr); }
+  .estimate { grid-template-columns: repeat(2, 1fr); }
   .stats { grid-template-columns: repeat(3, 1fr); }
 }
 

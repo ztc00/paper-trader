@@ -34,6 +34,12 @@ rules. Working orders fill on the live price and go to a history. Every
 position has a Close button. A star puts an asset on the watchlist, which the
 tape can show instead of the top 10. Every trade can carry a note.
 
+The desk is laid out like a trading desk: what you look at on the left
+(search, the asset and its chart, the news), what you do on the right (the
+ticket, working orders, positions, recent trades), with the right side
+pinned so the ticket is always in reach, and the tape sliding across the
+top as a carousel. On a phone, a Buy / Sell bar sits at the bottom.
+
 There are four pages, all on the same saved state: the **Desk** for trading,
 **Markets** for the top 50 coins and the big US tickers, **Portfolio** for
 what you hold with an allocation donut and the performance panel, and

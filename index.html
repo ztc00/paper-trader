@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Paper Trader</title>
-  <meta name="description" content="Practice buying and selling crypto with fake money at live prices, inside your own rules.">
+  <meta name="description" content="Practice buying and selling crypto and stocks with fake money at live prices, inside your own rules.">
   <meta name="theme-color" content="#0B0F0D">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B0F0D'/%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%233DF28A'/%3E%3Cpath d='M10 20 L15 14 L18 17 L23 11' fill='none' stroke='%2307110B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/styles.css">
@@ -33,14 +33,17 @@
         <button type="button" class="seg-btn active" data-tape="top" id="tape-top">Top 10</button>
         <button type="button" class="seg-btn" data-tape="watch" id="tape-watch">Watchlist</button>
       </div>
-      <ul class="tape" id="tape"><li class="muted">Loading the tape…</li></ul>
+      <div class="marquee" id="marquee">
+        <ul class="tape" id="tape"><li class="muted">Loading the tape…</li></ul>
+        <ul class="tape tape-clone" id="tape-clone" aria-hidden="true"></ul>
+      </div>
     </div>
   </section>
 
   <main class="layout">
     <div class="col left">
 
-      <section class="block" aria-labelledby="h-search">
+      <section class="block search-block" aria-labelledby="h-search">
         <div class="section-head">
           <h2 id="h-search">Find a coin or stock</h2>
           <div class="market" role="group" aria-label="Market">
@@ -50,38 +53,48 @@
         </div>
         <form id="search-form" novalidate>
           <div class="row">
-            <label class="visually-hidden" for="search-input">Coin name</label>
+            <label class="visually-hidden" for="search-input">Coin or stock</label>
             <input id="search-input" type="search" placeholder="bitcoin, eth, sol" autocomplete="off">
             <button type="submit" class="quiet" id="search-btn">Search</button>
           </div>
           <p class="field-msg" id="search-msg" aria-live="polite"></p>
+          <ul class="results" id="search-results" aria-label="Matches"></ul>
         </form>
-        <ul class="results" id="search-results" aria-label="Matches"></ul>
       </section>
 
-      <section class="block coin" aria-labelledby="h-coin" aria-live="polite">
-        <h2 id="h-coin">Coin</h2>
+      <section class="block coin" aria-label="Selected asset" aria-live="polite">
         <div id="coin-empty">
           <p class="muted">Nothing picked yet. Three steps:</p>
           <ol class="steps">
             <li>Search a coin or a stock above, or click one on the tape.</li>
-            <li>Fill the order ticket: Buy or Sell, a size, an order type, then Review and Confirm.</li>
-            <li>Watch the position and the P&amp;L move with the live price. Your rules and the mood sit under the ticket.</li>
+            <li>Fill the order ticket on the right: Buy or Sell, a size, an order type, then Review and Confirm.</li>
+            <li>Watch the position and the P&amp;L move with the live price. Your rules sit under the ticket.</li>
           </ol>
         </div>
         <p class="muted" id="coin-loading" hidden>Loading…</p>
         <p class="error" id="coin-error" hidden><span id="coin-error-text"></span> <button type="button" class="quiet small" id="coin-retry">Retry</button></p>
         <div id="coin-body" hidden>
-          <p class="coin-name"><span id="coin-name"></span> <span class="muted fig" id="coin-symbol"></span> <button type="button" class="quiet small star" id="star-btn" aria-pressed="false">☆ Watch</button></p>
-          <p class="price fig" id="coin-price"></p>
-          <p class="muted fig" id="coin-change"></p>
-          <p class="muted" id="coin-updated"></p>
+          <div class="coin-head">
+            <div>
+              <p class="coin-name"><span id="coin-name"></span> <span class="muted fig" id="coin-symbol"></span></p>
+              <p class="muted" id="coin-updated"></p>
+            </div>
+            <button type="button" class="quiet small star" id="star-btn" aria-pressed="false">
+              <svg class="star-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.8l2.5 5.4 5.9.6-4.4 4 1.3 5.8L10 14.6l-5.3 3 1.3-5.8-4.4-4 5.9-.6z"/></svg>
+              <span id="star-text">Watch</span>
+            </button>
+          </div>
+          <div class="coin-price-row">
+            <p class="price fig" id="coin-price"></p>
+            <p class="muted fig" id="coin-change"></p>
+          </div>
           <div class="chart-head">
             <div class="ranges" role="group" aria-label="Chart range">
               <button type="button" class="quiet small range" data-days="1">1D</button>
               <button type="button" class="quiet small range active" data-days="7">7D</button>
               <button type="button" class="quiet small range" data-days="30">30D</button>
               <button type="button" class="quiet small range" data-days="365">1Y</button>
+              <span class="fig range-change" id="range-change"></span>
             </div>
             <p class="muted" id="chart-status"></p>
           </div>
@@ -89,13 +102,39 @@
         </div>
       </section>
 
-      <section class="block" aria-labelledby="h-trade">
+      <section class="block" aria-labelledby="h-news" aria-live="polite">
+        <div class="section-head">
+          <h2 id="h-news">News</h2>
+          <p class="mood-line">
+            <span class="muted" id="mood-loading">Mood loading…</span>
+            <span class="error" id="mood-error" hidden><span id="mood-error-text"></span> <button type="button" class="quiet small" id="mood-retry">Retry</button></span>
+            <span id="mood-body" hidden>
+              <span class="muted" id="mood-source">Fear &amp; Greed</span>
+              <span class="fig" id="fng-value"></span> <span id="fng-label"></span>
+              <span class="muted">· headlines</span> <span class="fig" id="headline-score">—</span> <span id="headline-label"></span>
+            </span>
+          </p>
+        </div>
+        <p class="muted" id="news-empty">Pick a coin or stock to see its news.</p>
+        <p class="muted" id="news-loading" hidden>Loading…</p>
+        <p class="error" id="news-error" hidden><span id="news-error-text"></span> <button type="button" class="quiet small" id="news-retry">Retry</button></p>
+        <div class="brief" id="brief" hidden>
+          <p class="brief-head"><span class="muted">AI read</span> <span class="fig" id="brief-sentiment"></span> <span class="muted" id="brief-compare"></span></p>
+          <p id="brief-text"></p>
+        </div>
+        <ul class="news" id="news-list" hidden></ul>
+      </section>
+
+    </div>
+    <div class="col right">
+
+      <section class="block ticket-block" aria-labelledby="h-trade">
         <div class="section-head">
           <h2 id="h-trade">Order ticket</h2>
           <p class="muted fig" id="bp-line"></p>
         </div>
         <form id="ticket" novalidate>
-          <div class="seg" role="group" aria-label="Side">
+          <div class="seg side-seg" role="group" aria-label="Side">
             <button type="button" class="seg-btn active" data-side="Buy" id="side-buy">Buy</button>
             <button type="button" class="seg-btn" data-side="Sell" id="side-sell">Sell</button>
           </div>
@@ -124,14 +163,12 @@
                   <button type="button" class="seg-btn" data-mode="dollars" id="mode-dollars">Dollars</button>
                 </span>
               </label>
-              <div class="row">
-                <input id="t-qty" class="fig" type="text" inputmode="decimal" placeholder="0.5">
-                <div class="presets" role="group" aria-label="Size presets">
-                  <button type="button" class="quiet small" data-pct="25">25%</button>
-                  <button type="button" class="quiet small" data-pct="50">50%</button>
-                  <button type="button" class="quiet small" data-pct="75">75%</button>
-                  <button type="button" class="quiet small" data-pct="100">100%</button>
-                </div>
+              <input id="t-qty" class="fig" type="text" inputmode="decimal" placeholder="0.5">
+              <div class="presets" role="group" aria-label="Size presets">
+                <button type="button" class="quiet small" data-pct="25">25%</button>
+                <button type="button" class="quiet small" data-pct="50">50%</button>
+                <button type="button" class="quiet small" data-pct="75">75%</button>
+                <button type="button" class="quiet small" data-pct="100">100%</button>
               </div>
               <p class="field-msg" id="t-qty-msg" aria-live="polite"></p>
               <p class="muted sizer" id="sizer"></p>
@@ -172,11 +209,11 @@
       </section>
 
       <section class="block" aria-labelledby="h-orders">
-        <h2 id="h-orders">Orders</h2>
-        <p class="muted" id="orders-empty">No working orders.</p>
+        <h2 id="h-orders">Working orders</h2>
+        <p class="muted" id="orders-empty">None. A limit, stop or trailing order waits here until the price gets there.</p>
         <ul class="orders" id="orders-list" aria-label="Working orders"></ul>
         <details class="history" id="history">
-          <summary><span>History</span> <span class="muted fig" id="history-count"></span></summary>
+          <summary><span>Order history</span> <span class="muted fig" id="history-count"></span></summary>
           <p class="muted" id="history-empty">Nothing filled yet.</p>
           <div class="table-wrap">
             <table class="grid" id="history-table" hidden>
@@ -187,67 +224,38 @@
         </details>
       </section>
 
-      <section class="block" aria-labelledby="h-mood" aria-live="polite">
-        <h2 id="h-mood">Mood</h2>
-        <p class="muted" id="mood-loading">Loading…</p>
-        <p class="error" id="mood-error" hidden><span id="mood-error-text"></span> <button type="button" class="quiet small" id="mood-retry">Retry</button></p>
-        <div class="mood" id="mood-body" hidden>
-          <p class="mood-fng"><span class="mood-number fig" id="fng-value"></span> <span id="fng-label"></span> <span class="muted" id="mood-source">Fear &amp; Greed</span></p>
-          <p class="mood-news" id="headline-mood"><span class="muted">Headlines</span> <span class="fig" id="headline-score">—</span> <span id="headline-label"></span></p>
-        </div>
-      </section>
-
-    </div>
-    <div class="col right">
-
-      <section class="block" aria-labelledby="h-news" aria-live="polite">
-        <h2 id="h-news">News</h2>
-        <p class="muted" id="news-empty">Pick a coin or stock to see its news.</p>
-        <p class="muted" id="news-loading" hidden>Loading…</p>
-        <p class="error" id="news-error" hidden><span id="news-error-text"></span> <button type="button" class="quiet small" id="news-retry">Retry</button></p>
-        <ul class="news" id="news-list" hidden></ul>
-        <div class="brief" id="brief" hidden>
-          <p class="brief-head"><span class="muted">AI read</span> <span class="fig" id="brief-sentiment"></span> <span class="muted" id="brief-compare"></span></p>
-          <p id="brief-text"></p>
-        </div>
-      </section>
-
       <section class="block" aria-labelledby="h-portfolio">
-        <h2 id="h-portfolio">Portfolio</h2>
-        <p class="cash">Cash <span class="fig" id="cash">$10,000.00</span></p>
+        <div class="section-head">
+          <h2 id="h-portfolio">Positions</h2>
+          <p class="muted">Cash <span class="fig" id="cash">$10,000.00</span></p>
+        </div>
         <p class="muted" id="positions-empty">No positions yet.</p>
         <div class="table-wrap">
-        <table class="grid" id="positions-table" hidden>
-          <thead>
-            <tr><th>Asset</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th><th></th></tr>
-          </thead>
-          <tbody id="positions-body"></tbody>
-          <tfoot>
-            <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td><td></td></tr>
-          </tfoot>
-        </table>
+          <table class="grid" id="positions-table" hidden>
+            <thead>
+              <tr><th>Asset</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th><th></th></tr>
+            </thead>
+            <tbody id="positions-body"></tbody>
+            <tfoot>
+              <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td><td></td></tr>
+            </tfoot>
+          </table>
         </div>
-      </section>
-
-      <section class="block" aria-labelledby="h-perf">
-        <h2 id="h-perf">Performance</h2>
-        <svg class="chart equity" id="equity" role="img" aria-label="Portfolio value over time"></svg>
-        <dl class="stats" id="stats"></dl>
       </section>
 
       <section class="block" aria-labelledby="h-trades">
         <div class="section-head">
-          <h2 id="h-trades">Trades</h2>
-          <button type="button" class="quiet small" id="export-btn" hidden>Export CSV</button>
+          <h2 id="h-trades">Recent trades</h2>
+          <a class="muted link" id="export-btn" href="trades.html" hidden>All trades and export →</a>
         </div>
         <p class="muted" id="trades-empty">No trades yet.</p>
         <div class="table-wrap">
-        <table class="grid" id="trades-table" hidden>
-          <thead>
-            <tr><th>Time</th><th>Side</th><th>Asset</th><th>Units</th><th>Price</th><th>Dollars</th><th>Fee</th><th>Realized</th></tr>
-          </thead>
-          <tbody id="trades-body"></tbody>
-        </table>
+          <table class="grid" id="trades-table" hidden>
+            <thead>
+              <tr><th>Time</th><th>Side</th><th>Asset</th><th>Units</th><th>Price</th><th>Dollars</th><th>Fee</th><th>Realized</th></tr>
+            </thead>
+            <tbody id="trades-body"></tbody>
+          </table>
         </div>
       </section>
 
@@ -293,11 +301,18 @@
           <input id="rule-slip" class="fig" type="text" inputmode="decimal">
           <p class="field-msg" id="rule-slip-msg"></p>
         </div>
-        <button type="submit" class="quiet">Save rules</button>
+        <div class="rule rule-actions">
+          <button type="submit" class="quiet">Save rules</button>
+          <button type="button" class="quiet danger" id="start-over">Start over</button>
+        </div>
       </form>
     </details>
-    <button type="button" class="quiet danger" id="start-over">Start over</button>
   </footer>
+
+  <div class="mobile-bar" id="mobile-bar">
+    <button type="button" class="buy" id="m-buy">Buy</button>
+    <button type="button" class="sell" id="m-sell">Sell</button>
+  </div>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 

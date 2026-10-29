@@ -178,6 +178,30 @@ confirmation, no order history, no watchlist, no one-click close. Version 4:
 30. **First visit.** The empty desk shows three steps: pick an asset, place
     an order, watch the P&L.
 
+## Version 5, 2026-10-29: the desk, laid out for use
+
+31. **Looking on the left, doing on the right.** Left column: search, the
+    asset (name, live line, price and change on one row, the range buttons
+    with the move over the range, the chart), then the news with the mood
+    folded into its header. Right column: the order ticket, working orders
+    with their history, positions with Sell… and Close, and the last five
+    trades with a link to the rest. On a laptop the right column sticks to
+    the top and scrolls on its own, so the ticket is always in reach.
+32. **The tape is a carousel.** Two copies of the list slide left
+    continuously, four seconds per item, so the join is seamless. It pauses
+    under the pointer and stays clickable. With reduced motion on, or fewer
+    than four items, it stands still and scrolls by hand.
+33. **Search matches drop over the page** instead of pushing it down, and
+    close on Esc or a click elsewhere. "/" focuses the search box.
+34. **Performance leaves the desk.** It lives on the Portfolio page.
+35. **Start over asks once.** The first click arms it for four seconds and
+    says so; the second wipes.
+36. **Phone:** a fixed Buy / Sell bar at the bottom sets the side and brings
+    the ticket up. Columns stack: search, asset and chart, ticket, orders,
+    positions, trades, news.
+37. The price is 44px, not 64. The "Coin" label is gone. The star is an
+    icon, not a character.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;
