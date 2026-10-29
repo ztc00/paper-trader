@@ -140,6 +140,44 @@ Everything below is built on the same `state` and the same rules.
     gutter, a dashed line and tag at the last value, a dashed baseline at
     the starting cash on the equity curve, and a boxed readout on hover.
 
+## Version 4, 2026-10-29: the trading flow, rebuilt from the real tools
+
+See RESEARCH.md. Version 3 was not usable as a trading tool: dollars instead
+of units, three forms, fills at the last price with no spread or fee, no
+confirmation, no order history, no watchlist, no one-click close. Version 4:
+
+23. **One order ticket.** Buy or Sell. Size in units or in dollars, with
+    25 / 50 / 75 / 100% presets (of cash when buying, of the position when
+    selling). Order type Market, Limit, Stop, Stop-limit or Trailing stop,
+    with the price fields each type needs, prefilled from the live price.
+    Time in force Day or GTC; Day orders expire at midnight. The ticket
+    shows the estimated fill price, total, fee and buying power after,
+    live, and a **Review** step repeats them with Confirm or Edit before
+    anything happens. My rules and the sizer stay where they were.
+24. **Honest fills.** Buys fill at the ask, sells at the bid: Coinbase's
+    feed carries both for crypto; stocks get a 0.02% simulated spread.
+    Market and triggered stop orders add slippage (a setting, default 5
+    basis points). A commission per fill (a setting, default $0) comes out
+    of cash and out of realized P&L. Every fill logs the quote it was
+    filled against.
+25. **Working orders and history.** Working orders check on every price
+    update: limit fills at the limit or better, stop turns into a market
+    fill, stop-limit turns into a limit order, trailing stop follows the
+    high since it was placed. A Sell order can never sell more than the
+    position. Cancel from the list. Filled, cancelled and expired orders go
+    to a history (last 200) with the fill price and time.
+26. **Close in one click.** Every position row on the Desk and the
+    Portfolio page has Close, which sells it all at the market.
+27. **Watchlist.** A star by the selected asset adds it; the tape switches
+    between Top 10 and Watchlist; the watchlist's prices refresh with the
+    rest. Saved with the state.
+28. **Journal.** Every trade can carry a note, edited on the Trades page,
+    saved with the trade.
+29. **Fills announce themselves.** A small toast at the bottom right when a
+    working order fills, expires or is cancelled by the rules.
+30. **First visit.** The empty desk shows three steps: pick an asset, place
+    an order, watch the P&L.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;
@@ -156,6 +194,14 @@ States for the new parts:
 - **Performance empty:** the curve is a flat line at the starting cash and the
   stats show "—" until there is a sell.
 - **AI read missing:** the block is hidden; the headlines and my score show.
+- **Ticket invalid:** under the field: "Enter a size above 0.", "You have
+  $X in cash." (after fee), "You hold N units of BTC.", "A limit buy goes at
+  or below the price now, $X." (and the mirror for sells, stops and
+  take-profits), "Trail must be between 0.1% and 50%."
+- **Ticket review:** the form freezes, a summary appears with Confirm and
+  Edit. Market orders fill on Confirm; others go to Working orders.
+- **Working empty:** "No working orders." **History empty:** "Nothing filled
+  yet."
 - **Portfolio empty:** "All cash. Nothing held yet." and "No positions yet."
   with the cards still showing cash and the total. **Trades empty:** "No
   trades yet. Make one on the Desk." and the filters hidden. **Markets
