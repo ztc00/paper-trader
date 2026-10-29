@@ -225,6 +225,13 @@ confirmation, no order history, no watchlist, no one-click close. Version 4:
     Working orders heading carries a count. The order history shows 30 rows
     with Show all.
 
+44. **Zoom and pan on the chart.** Scroll zooms around the pointer, drag
+    pans, two fingers pinch, double-click or Reset zoom goes back. The line
+    under the chart says the window's span while zoomed. It works on the
+    data loaded for the range (never fewer than eight bars), so finer detail
+    means a shorter range first. The live-price tag shows only while the
+    end of the range is in view.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;

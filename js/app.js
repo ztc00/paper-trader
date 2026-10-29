@@ -12,6 +12,7 @@ let brief = null;   // { text, sentiment, model } the model's read of the news, 
 let tape = [];     // the tape on screen: top 10 coins with sparklines, or the ten stocks
 let liveAt = null; // when the last live tick arrived
 let chart = { days: 7, points: [], forId: null }; // the price chart on screen
+let chartView = { from: 0, to: 1 }; // the zoomed window, as fractions of the points
 const chartCache = {}; // "bitcoin:7" -> { points, at }
 
 // ---------- Elements ----------
@@ -112,6 +113,8 @@ const els = {
   mSell: $("m-sell"),
   chart: $("chart"),
   chartStatus: $("chart-status"),
+  chartReset: $("chart-reset"),
+  chartHintText: $("chart-hint-text"),
   ranges: document.querySelectorAll(".range"),
   exportBtn: $("export-btn"),
   marketBtns: document.querySelectorAll(".market-btn"),
@@ -267,6 +270,7 @@ async function fetchChart() {
   const cached = chartCache[key];
   if (cached && Date.now() - cached.at < 5 * 60 * 1000) {
     chart = { days: chart.days, points: cached.points, forId: id };
+    chartView = { from: 0, to: 1 };
     renderChart();
     return;
   }
@@ -286,6 +290,7 @@ async function fetchChart() {
     chartCache[key] = { points, at: Date.now() };
     if (state.selected !== id) return; // the user moved on while this loaded
     chart = { days: chart.days, points, forId: id };
+    chartView = { from: 0, to: 1 };
     els.chartStatus.textContent = "";
     renderChart();
   } catch (err) {
@@ -864,13 +869,23 @@ function renderChart() {
     if (state.selected && chart.forId !== state.selected) els.chart.replaceChildren();
     return;
   }
-  const points = chart.points.slice();
+  const all = chart.points.slice();
   const q = prices[state.selected];
-  if (q) points.push([Date.now(), q.price]); // the live price is the last point
-  // The move over the range, beside the range buttons.
-  const move = ((points[points.length - 1][1] - points[0][1]) / points[0][1]) * 100;
+  if (q) all.push([Date.now(), q.price]); // the live price is the last point
+  // The move over the whole range, beside the range buttons.
+  const move = ((all[all.length - 1][1] - all[0][1]) / all[0][1]) * 100;
   els.rangeChange.textContent = fmtPct(move);
   els.rangeChange.className = "fig range-change " + upDown(move);
+  // Then only the zoomed window is drawn.
+  const n = all.length;
+  const i0 = Math.max(0, Math.floor(chartView.from * (n - 1)));
+  const i1 = Math.min(n - 1, Math.ceil(chartView.to * (n - 1)));
+  const points = all.slice(i0, i1 + 1);
+  const zoomed = chartView.from > 0 || chartView.to < 1;
+  show(els.chartReset, zoomed);
+  els.chartHintText.textContent = zoomed
+    ? `${fmtWhen(points[0][0])} to ${fmtWhen(points[points.length - 1][0])}`
+    : "Scroll to zoom, drag to pan, double-click to reset.";
   const markers = state.trades
     .filter((t) => t.coinId === state.selected)
     .map((t) => ({ t: new Date(t.time).getTime(), price: t.price, side: t.side }));
@@ -884,6 +899,7 @@ function renderChart() {
   drawLineChart(els.chart, points, {
     height: 260,
     evenly: isStock(state.selected), // stock bars only exist in market hours
+    lastLine: chartView.to >= 1, // the live-price tag only when the end is in view
     markers,
     fmt: (v) => fmtMoney(v),
     fmtTime,
@@ -1264,6 +1280,90 @@ for (const btn of els.ranges) {
     fetchChart();
   });
 }
+
+// ---- Zoom and pan on the chart ----
+// The window is two fractions of the loaded points. Scroll zooms around the
+// pointer, drag pans, two fingers pinch, double-click resets. The plot area
+// starts 10px in and ends 74px before the right edge (the price gutter).
+
+const CHART_MIN_POINTS = 8;
+
+function clampView(from, to) {
+  const n = chart.points.length + 1;
+  const minSpan = Math.min(1, CHART_MIN_POINTS / Math.max(n - 1, 1));
+  let span = Math.min(1, Math.max(minSpan, to - from));
+  from = Math.max(0, Math.min(1 - span, from));
+  chartView = { from, to: from + span };
+  renderChart();
+}
+
+function chartFraction(clientX) {
+  const rect = els.chart.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (clientX - rect.left - 10) / (rect.width - 84)));
+}
+
+els.chart.addEventListener("wheel", (e) => {
+  if (!chart.points.length) return;
+  e.preventDefault();
+  const f = chartFraction(e.clientX);
+  const span = chartView.to - chartView.from;
+  const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+  const anchor = chartView.from + f * span;
+  const next = span * factor;
+  clampView(anchor - f * next, anchor + (1 - f) * next);
+}, { passive: false });
+
+const drag = { pointers: new Map(), lastX: null, lastDist: null, moved: false };
+
+els.chart.addEventListener("pointerdown", (e) => {
+  if (!chart.points.length) return;
+  els.chart.setPointerCapture(e.pointerId);
+  drag.pointers.set(e.pointerId, e.clientX);
+  drag.lastX = e.clientX;
+  drag.moved = false;
+  if (drag.pointers.size === 2) {
+    const [a, b] = [...drag.pointers.values()];
+    drag.lastDist = Math.abs(a - b);
+  }
+});
+
+els.chart.addEventListener("pointermove", (e) => {
+  if (!drag.pointers.has(e.pointerId)) return;
+  drag.pointers.set(e.pointerId, e.clientX);
+  const rect = els.chart.getBoundingClientRect();
+  const plotW = rect.width - 84;
+  const span = chartView.to - chartView.from;
+  if (drag.pointers.size === 2) {
+    const [a, b] = [...drag.pointers.values()];
+    const dist = Math.abs(a - b);
+    if (drag.lastDist) {
+      const f = chartFraction((a + b) / 2);
+      const next = span * (drag.lastDist / dist);
+      const anchor = chartView.from + f * span;
+      clampView(anchor - f * next, anchor + (1 - f) * next);
+    }
+    drag.lastDist = dist;
+    return;
+  }
+  const dx = e.clientX - drag.lastX;
+  if (Math.abs(dx) > 2) drag.moved = true;
+  drag.lastX = e.clientX;
+  if (span >= 1) return; // nothing to pan when the whole range shows
+  els.chart.classList.add("dragging");
+  const shift = -(dx / plotW) * span;
+  clampView(chartView.from + shift, chartView.to + shift);
+});
+
+for (const type of ["pointerup", "pointercancel"]) {
+  els.chart.addEventListener(type, (e) => {
+    drag.pointers.delete(e.pointerId);
+    drag.lastDist = null;
+    if (drag.pointers.size === 0) els.chart.classList.remove("dragging");
+  });
+}
+
+els.chart.addEventListener("dblclick", () => clampView(0, 1));
+els.chartReset.addEventListener("click", () => clampView(0, 1));
 
 // ---- The order ticket ----
 

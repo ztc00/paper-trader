@@ -224,7 +224,12 @@ body {
   height: auto;
   margin-top: 6px;
   touch-action: none;
+  cursor: grab;
+  user-select: none;
 }
+
+.chart.dragging { cursor: grabbing; }
+.chart-hint { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; margin-top: 4px; min-height: 26px; }
 
 .chart .grid { stroke: var(--hairline); stroke-width: 1; }
 .chart .axis { fill: var(--text-muted); font-size: 11px; font-family: var(--font-figures); font-weight: 700; }
