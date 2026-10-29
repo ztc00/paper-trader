@@ -273,7 +273,7 @@ async function fetchStockPrices(extraSymbols = []) {
   const firstTime = selectedHere && !prices[state.selected];
   if (firstTime) setCoinView("loading");
   try {
-    const response = await fetch(`/api/stocks?op=quote&symbols=${encodeURIComponent([...symbols].join(","))}`);
+    const response = await fetch(`/api/stocks?op=quote&symbols=${encodeURIComponent([...symbols].sort().join(","))}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `The stocks function answered ${response.status}`);
     const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
@@ -505,7 +505,7 @@ async function fetchNews() {
   setNewsView("loading");
   try {
     const url = isStock(coin.id)
-      ? `/api/stocks?op=news&symbol=${encodeURIComponent(coin.symbol)}&name=${encodeURIComponent(coin.name)}`
+      ? `/api/stocks?op=news&symbol=${encodeURIComponent(coin.symbol)}`
       : `/api/news?q=${encodeURIComponent(coin.name)}`;
     const response = await fetch(url);
     const data = await response.json();

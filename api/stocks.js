@@ -6,7 +6,7 @@
 //   /api/stocks?op=search&q=apple
 //   /api/stocks?op=quote&symbols=AAPL,MSFT
 //   /api/stocks?op=chart&symbol=AAPL&days=7
-//   /api/stocks?op=news&symbol=AAPL&name=Apple
+//   /api/stocks?op=news&symbol=AAPL
 
 import { readHeadlines, cacheFor } from "./_read.js";
 
@@ -31,7 +31,7 @@ export default {
       if (op === "search") return await search(url.searchParams.get("q") || "", key);
       if (op === "quote") return await quote(url.searchParams.get("symbols") || "", key);
       if (op === "chart") return await chart(url.searchParams.get("symbol") || "", url.searchParams.get("days") || "7");
-      if (op === "news") return await news(url.searchParams.get("symbol") || "", url.searchParams.get("name") || "", key);
+      if (op === "news") return await news(url.searchParams.get("symbol") || "", key);
       return json({ error: "Say what you want: search, quote, chart or news." }, 400);
     } catch (err) {
       console.error("stocks", op, err.message);
@@ -55,7 +55,8 @@ async function search(raw, key) {
 }
 
 async function quote(raw, key) {
-  const symbols = [...new Set(raw.toUpperCase().split(",").map((s) => s.trim()).filter((s) => SYMBOL.test(s)))].slice(0, 15);
+  // Sorted, so "AAPL,MSFT" and "MSFT,AAPL" share one cached answer.
+  const symbols = [...new Set(raw.toUpperCase().split(",").map((s) => s.trim()).filter((s) => SYMBOL.test(s)))].sort().slice(0, 15);
   if (!symbols.length) return json({ error: "Say which symbols." }, 400);
   const quotes = {};
   await Promise.all(symbols.map(async (s) => {
@@ -92,7 +93,8 @@ async function chart(symbol, daysRaw) {
   return json({ points }, 200, "public, s-maxage=300");
 }
 
-async function news(symbol, name, key) {
+// The cache key is the symbol alone, so one model call an hour per ticker.
+async function news(symbol, key) {
   const s = symbol.toUpperCase();
   if (!SYMBOL.test(s)) return json({ error: "Say which symbol." }, 400);
   const to = new Date();
@@ -106,7 +108,6 @@ async function news(symbol, name, key) {
     .sort((a, b) => b.datetime - a.datetime)
     .slice(0, 5)
     .map((a) => ({ title: a.headline, url: a.url, source: a.source, publishedAt: new Date(a.datetime * 1000).toISOString() }));
-  const subject = name ? `${name} (${s})` : s;
-  const brief = articles.length ? await readHeadlines(subject, articles.map((a) => a.title)) : null;
+  const brief = articles.length ? await readHeadlines(`the stock ${s}`, articles.map((a) => a.title)) : null;
   return json({ articles, brief, briefError: brief ? undefined : "unavailable" }, 200, cacheFor(brief, articles));
 }
