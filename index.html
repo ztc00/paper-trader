@@ -96,6 +96,7 @@
         <h2 id="h-portfolio">Portfolio</h2>
         <p class="cash">Cash <span class="fig" id="cash">$10,000.00</span></p>
         <p class="muted" id="positions-empty">No positions yet.</p>
+        <div class="table-wrap">
         <table class="grid" id="positions-table" hidden>
           <thead>
             <tr><th>Coin</th><th>Units</th><th>Avg</th><th>Price</th><th>Value</th><th>P&amp;L</th></tr>
@@ -105,17 +106,20 @@
             <tr class="total-row"><td>Total</td><td></td><td></td><td></td><td class="fig" id="positions-value"></td><td class="fig" id="positions-pnl"></td></tr>
           </tfoot>
         </table>
+        </div>
       </section>
 
       <section class="block" aria-labelledby="h-trades">
         <h2 id="h-trades">Trades</h2>
         <p class="muted" id="trades-empty">No trades yet.</p>
+        <div class="table-wrap">
         <table class="grid" id="trades-table" hidden>
           <thead>
             <tr><th>Time</th><th>Side</th><th>Coin</th><th>Units</th><th>Price</th><th>Dollars</th><th>Realized</th></tr>
           </thead>
           <tbody id="trades-body"></tbody>
         </table>
+        </div>
       </section>
 
     </div>

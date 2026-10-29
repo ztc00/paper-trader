@@ -66,9 +66,10 @@ body {
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--gutter);
+  gap: 4px var(--gutter);
   max-width: var(--column);
   margin: 0 auto;
   padding: 16px var(--gutter);
@@ -85,7 +86,8 @@ body {
 .totals {
   margin: 0;
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 0 12px;
   align-items: baseline;
 }
 
@@ -322,7 +324,7 @@ label {
 
 .grid tfoot td { border-bottom: 0; border-top: 1px solid var(--edge); }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Footer: rules and start over */
 
