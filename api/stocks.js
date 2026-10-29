@@ -9,6 +9,8 @@
 //   /api/stocks?op=news&symbol=AAPL
 
 import https from "node:https";
+import dns from "node:dns";
+import net from "node:net";
 import { readHeadlines, cacheFor } from "./_read.js";
 
 const FINNHUB = "https://finnhub.io/api/v1";
@@ -129,11 +131,11 @@ async function news(symbol, key) {
 
 // Only a public https page is worth opening: no plain http, no IP literal,
 // no local or internal names, no credentials, no odd port.
-function safeUrl(raw) {
+function safeUrl(raw, base) {
   try {
-    const u = new URL(raw);
+    const u = new URL(raw, base);
     if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return null;
-    const h = u.hostname.toLowerCase();
+    const h = u.hostname.toLowerCase().replace(/\.+$/, "");
     if (/^[\d.]+$/.test(h) || h.includes(":") || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h) || !h.includes(".")) return null;
     return u.href;
   } catch {
@@ -153,6 +155,34 @@ function imageFromHead(html) {
   return null;
 }
 
+// Private, loopback, link-local, carrier-NAT and multicast addresses are
+// never fetched, whatever name pointed at them.
+function privateAddress(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+      || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  if (v6.startsWith("::ffff:")) return privateAddress(v6.slice(7));
+  return v6 === "::1" || v6 === "::" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6) || /^ff/.test(v6);
+}
+
+// Resolve the name, refuse it if any answer is private, and hand the one
+// checked address to the socket, so a later DNS answer cannot move it.
+function pinnedLookup(hostname, options, callback) {
+  dns.lookup(hostname, { all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    if (!addresses.length || addresses.some((a) => privateAddress(a.address))) {
+      return callback(new Error("address not allowed"));
+    }
+    // Node asks for the whole list when it picks the family itself.
+    const ordered = addresses.filter((a) => a.family === 4).concat(addresses.filter((a) => a.family !== 4));
+    if (options && options.all) return callback(null, ordered);
+    callback(null, ordered[0].address, ordered[0].family);
+  });
+}
+
 // The og:image of a page: the picture a link to it shows in a chat. Uses
 // Node's https client because Yahoo's response headers are too big for
 // fetch. Follows up to five redirects, each checked, reads at most 400 KB,
@@ -164,10 +194,10 @@ function previewImage(rawUrl, hops = 0) {
     let done = false, req = null;
     const finish = (v) => { if (!done) { done = true; clearTimeout(timer); if (req) req.destroy(); resolve(v); } };
     const timer = setTimeout(() => finish(null), 4000);
-    req = https.get(url, { maxHeaderSize: 262144, headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperTrader/1.0)", Accept: "text/html" } }, (res) => {
+    req = https.get(url, { maxHeaderSize: 262144, lookup: pinnedLookup, headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperTrader/1.0)", Accept: "text/html" } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
-        const next = safeUrl(new URL(res.headers.location, url).href);
+        const next = safeUrl(res.headers.location, url); // its own try/catch handles a bad Location
         done = true; clearTimeout(timer);
         return next ? previewImage(next, hops + 1).then(resolve) : resolve(null);
       }
