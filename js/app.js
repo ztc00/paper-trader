@@ -173,15 +173,19 @@ async function fetchCryptoPrices() {
   const firstTime = selectedHere && !prices[state.selected];
   if (firstTime) setCoinView("loading");
   try {
-    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${ids.join(",")}&price_change_percentage=24h,7d`);
+    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${ids.join(",")}&sparkline=true&price_change_percentage=24h,7d`);
     if (!response.ok) throw geckoError(response);
     const data = await response.json();
     const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
     for (const c of data) {
+      const known = prices[c.id];
       prices[c.id] = {
-        price: c.current_price,
+        // A live tick is fresher than this poll, so keep it.
+        price: known && liveHas(c.symbol.toUpperCase()) ? known.price : c.current_price,
+        bid: known && known.bid, ask: known && known.ask,
         change24h: c.price_change_percentage_24h_in_currency,
         change7d: c.price_change_percentage_7d_in_currency,
+        spark: c.sparkline_in_7d ? c.sparkline_in_7d.price : [],
       };
     }
     pricesLanded(before);
@@ -756,7 +760,7 @@ function renderUpdated() {
 
 function renderTape() {
   for (const b of els.tapeTabs) b.classList.toggle("active", b.dataset.tape === tapeView);
-  const items = tapeView === "watch" ? state.watchlist.map((w) => ({ ...w, spark: [] })) : tape;
+  const items = tapeView === "watch" ? state.watchlist.map((w) => ({ ...w, spark: (prices[w.id] && prices[w.id].spark) || [] })) : tape;
   if (tapeView === "watch" && items.length === 0) {
     els.tape.replaceChildren(el("li", "Nothing starred yet. Pick an asset and press ☆ Watch.", "muted"));
     return;

@@ -33,16 +33,31 @@
       <p class="muted" id="updated">Loading…</p>
     </div>
 
+    <section class="block" aria-labelledby="h-watch" id="watch-section" hidden>
+      <h2 id="h-watch">Watchlist</h2>
+      <div class="table-wrap">
+        <table class="grid" id="watch-table">
+          <thead>
+            <tr><th></th><th>Asset</th><th>Name</th><th>Price</th><th>24h</th><th>7d</th><th>7 days</th><th></th></tr>
+          </thead>
+          <tbody id="watch-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="block" aria-labelledby="h-coins">
       <div class="section-head">
         <h2 id="h-coins">Top 50 coins</h2>
-        <p class="muted">Click a row to trade it on the Desk.</p>
+        <div class="filters compact">
+          <label class="visually-hidden" for="coin-filter">Filter coins</label>
+          <input id="coin-filter" type="search" placeholder="Filter by name or symbol" autocomplete="off">
+        </div>
       </div>
       <p class="muted" id="coins-status">Loading…</p>
       <div class="table-wrap">
         <table class="grid" id="coins-table" hidden>
           <thead>
-            <tr><th>#</th><th>Coin</th><th>Name</th><th>Price</th><th>24h</th><th>7d</th><th>Market cap</th><th>7 days</th></tr>
+            <tr><th></th><th>Coin</th><th>Name</th><th class="sortable" data-sort="price">Price</th><th class="sortable" data-sort="change24h">24h</th><th class="sortable" data-sort="change7d">7d</th><th class="sortable" data-sort="cap">Market cap</th><th>7 days</th><th></th></tr>
           </thead>
           <tbody id="coins-body"></tbody>
         </table>
@@ -55,7 +70,7 @@
       <div class="table-wrap">
         <table class="grid" id="stocks-table" hidden>
           <thead>
-            <tr><th></th><th>Ticker</th><th>Name</th><th>Price</th><th>Today</th><th>Prev close</th><th>Day range</th></tr>
+            <tr><th></th><th>Ticker</th><th>Name</th><th>Price</th><th>Today</th><th>Prev close</th><th>Day range</th><th></th></tr>
           </thead>
           <tbody id="stocks-body"></tbody>
         </table>

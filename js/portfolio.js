@@ -3,7 +3,7 @@
 
 const els = {
   total: $("portfolio-total"), pnl: $("portfolio-pnl"), updated: $("updated"),
-  cardTotal: $("card-total"), cardCash: $("card-cash"), cardSince: $("card-since"), cardToday: $("card-today"),
+  cardTotal: $("card-total"), cardCash: $("card-cash"), cardSince: $("card-since"), cardToday: $("card-today"), cardTodayNote: $("card-today-note"),
   allocEmpty: $("alloc-empty"), alloc: $("alloc"), donut: $("donut"), legend: $("legend"),
   positionsEmpty: $("positions-empty"), positionsTable: $("positions-table"), positionsBody: $("positions-body"),
   positionsCost: $("positions-cost"), positionsValue: $("positions-value"), positionsPnl: $("positions-pnl"),
@@ -25,6 +25,15 @@ function render() {
   const since = total - state.rules.startingCash;
   const sincePct = (since / state.rules.startingCash) * 100;
   const todayRealized = state.trades.filter((t) => isToday(t.time)).reduce((a, t) => a + (t.realized || 0), 0);
+  // Today's move on what I hold: each position's value now against its
+  // value at the day's open (or 24 hours ago for a coin).
+  const todayOpen = state.positions.reduce((a, p) => {
+    const q = prices[p.id];
+    if (!q || !Number.isFinite(q.change24h)) return a;
+    const v = p.units * q.price;
+    return a + (v - v / (1 + q.change24h / 100));
+  }, 0);
+  const today = todayRealized + todayOpen;
 
   els.total.textContent = fmtMoney(total);
   els.pnl.textContent = `${fmtSigned(since)} (${fmtPct(sincePct)})`;
@@ -33,8 +42,9 @@ function render() {
   els.cardCash.textContent = fmtMoney(state.cash);
   els.cardSince.textContent = `${fmtSigned(since)} (${fmtPct(sincePct)})`;
   els.cardSince.className = "fig " + upDown(since);
-  els.cardToday.textContent = fmtSigned(todayRealized);
-  els.cardToday.className = "fig " + upDown(todayRealized);
+  els.cardToday.textContent = fmtSigned(today);
+  els.cardToday.className = "fig " + upDown(today);
+  els.cardTodayNote.textContent = `${fmtSigned(todayRealized)} realized · ${fmtSigned(todayOpen)} on open positions`;
 
   // Positions, biggest first.
   const rows = state.positions.map((p) => {
@@ -61,10 +71,22 @@ function render() {
       fmtMoney(r.cost), fmtMoney(r.value), `${weight.toFixed(1)}%`,
       [`${fmtSigned(r.gain)} (${fmtPct(r.cost ? (r.gain / r.cost) * 100 : 0)})`, upDown(r.gain)], "",
     ]);
+    const trade = el("button", "Trade", "quiet close-btn");
+    trade.type = "button";
+    trade.title = "Open it on the Desk";
+    trade.addEventListener("click", () => {
+      state.selected = r.p.id;
+      state.market = isStock(r.p.id) ? "stocks" : "crypto";
+      selectedCoin = { id: r.p.id, name: r.p.name, symbol: r.p.symbol };
+      save();
+      location.href = "index.html";
+    });
     const close = el("button", "Close", "quiet close-btn");
     close.type = "button";
     close.dataset.id = r.p.id;
+    close.title = "Sell it all at the market now";
     close.disabled = !r.q || Boolean(blockReason());
+    tr.lastChild.appendChild(trade);
     tr.lastChild.appendChild(close);
     els.positionsBody.appendChild(tr);
   }
@@ -101,8 +123,14 @@ function render() {
     const text = `${o.side} ${size} ${o.symbol} ${names[o.type]} ${at} · ${o.tif}`;
     const li = document.createElement("li");
     li.appendChild(el("span", text));
+    const right = el("span", "", "order-right");
     const q = prices[o.coinId];
-    li.appendChild(el("span", q ? `now ${fmtMoney(q.price)}` : "", "muted fig"));
+    right.appendChild(el("span", q ? `now ${fmtMoney(q.price)}` : "", "muted fig"));
+    const cancel = el("button", "Cancel", "cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", () => { closeOrder(o, "cancelled"); save(); render(); });
+    right.appendChild(cancel);
+    li.appendChild(right);
     els.ordersList.appendChild(li);
   }
 

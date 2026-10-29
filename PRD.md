@@ -202,6 +202,16 @@ confirmation, no order history, no watchlist, no one-click close. Version 4:
 37. The price is 44px, not 64. The "Coin" label is gone. The star is an
     icon, not a character.
 
+38. **Markets page, second pass.** A watchlist table at the top with live
+    prices and sparklines, a star on every row to add or remove, a Trade
+    button beside the row click, a filter box for the top 50, and sortable
+    Price, 24h, 7d and Market cap columns.
+39. **Portfolio page, second pass.** The Today card adds the move on open
+    positions to what was realized, and says both. Each position has Trade
+    (opens it on the Desk) and Close. Working orders can be cancelled here.
+40. **Watchlist sparklines** on the tape, from the same CoinGecko call that
+    brings the prices.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;

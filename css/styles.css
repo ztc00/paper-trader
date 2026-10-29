@@ -710,6 +710,8 @@ select:disabled { opacity: 0.4; }
 
 .card dt { color: var(--text-muted); font-size: var(--small); }
 .card dd { margin: 2px 0 0; font-size: var(--total); }
+.card dd.small { font-size: 13px; margin-top: 2px; }
+.order-right { display: flex; gap: 12px; align-items: center; }
 
 .alloc { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
 .alloc-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--small); }
@@ -728,6 +730,18 @@ select:disabled { opacity: 0.4; }
 .markets .grid td:nth-child(3) { font-family: var(--font-body); font-weight: 400; }
 .markets .grid td:nth-child(2) { font-family: var(--font-figures); font-weight: 700; }
 .markets tr.pick { cursor: pointer; }
+.markets .grid td:last-child { text-align: right; }
+.filters.compact { margin: 0; }
+.filters.compact input { height: 36px; width: 220px; flex: none; }
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--text); }
+.sortable.sorted { color: var(--text); }
+.sortable.sorted[aria-sort="descending"]::after { content: " ▾"; }
+.sortable.sorted[aria-sort="ascending"]::after { content: " ▴"; }
+.row-star { height: 26px; width: 26px; padding: 0; justify-content: center; border-color: transparent; color: var(--text-muted); }
+.row-star:hover { border-color: var(--edge); }
+.row-star.on { color: var(--warn); }
+.row-star.on .star-icon { fill: currentColor; }
 .markets tr.pick:hover td { background: var(--well); }
 
 /* Footer: rules and start over */
