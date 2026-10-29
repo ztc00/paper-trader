@@ -65,7 +65,7 @@
         <h2 id="h-trade">Trade</h2>
         <div class="forms">
           <form id="buy-form" novalidate>
-            <label for="buy-amount">Buy, in dollars</label>
+            <label for="buy-amount">Buy, in dollars <span class="sizer" id="sizer"></span></label>
             <div class="row">
               <input id="buy-amount" class="fig" type="text" inputmode="decimal" placeholder="250" disabled>
               <button type="submit" class="buy" id="buy-btn" disabled>Buy</button>
@@ -83,6 +83,22 @@
           </form>
         </div>
         <p class="note" id="trade-note" aria-live="polite"></p>
+
+        <form id="order-form" class="order" novalidate>
+          <label for="order-type">Order, filled when the live price gets there</label>
+          <div class="row">
+            <select id="order-type" disabled>
+              <option value="limit-buy">Buy when it drops to</option>
+              <option value="stop-loss">Sell all if it falls to</option>
+              <option value="take-profit">Sell all if it rises to</option>
+            </select>
+            <input id="order-price" class="fig" type="text" inputmode="decimal" placeholder="price" disabled>
+            <input id="order-dollars" class="fig" type="text" inputmode="decimal" placeholder="dollars" disabled>
+            <button type="submit" class="quiet" id="order-btn" disabled>Place</button>
+          </div>
+          <p class="field-msg" id="order-msg" aria-live="polite"></p>
+        </form>
+        <ul class="orders" id="orders-list" aria-label="Pending orders"></ul>
       </section>
 
       <section class="block" aria-labelledby="h-mood" aria-live="polite">
@@ -123,8 +139,17 @@
         </div>
       </section>
 
+      <section class="block" aria-labelledby="h-perf">
+        <h2 id="h-perf">Performance</h2>
+        <svg class="chart equity" id="equity" role="img" aria-label="Portfolio value over time"></svg>
+        <dl class="stats" id="stats"></dl>
+      </section>
+
       <section class="block" aria-labelledby="h-trades">
-        <h2 id="h-trades">Trades</h2>
+        <div class="section-head">
+          <h2 id="h-trades">Trades</h2>
+          <button type="button" class="quiet small" id="export-btn" hidden>Export CSV</button>
+        </div>
         <p class="muted" id="trades-empty">No trades yet.</p>
         <div class="table-wrap">
         <table class="grid" id="trades-table" hidden>
@@ -141,7 +166,7 @@
 
   <footer class="foot">
     <details class="rules-box" id="rules-box">
-      <summary><span id="rules-summary">$10,000 to start, 5 trades a day, $500 daily loss limit.</span> <span class="summary-action">Edit</span></summary>
+      <summary><span id="rules-summary">$10,000 to start, 5 trades a day, $500 daily loss limit, 1% risk with a 5% stop.</span> <span class="summary-action">Edit</span></summary>
       <form id="rules-form" class="rules" novalidate>
         <div class="rule">
           <label for="rule-cash">Starting cash</label>
@@ -157,6 +182,16 @@
           <label for="rule-loss">Daily loss limit, dollars</label>
           <input id="rule-loss" class="fig" type="text" inputmode="numeric">
           <p class="field-msg" id="rule-loss-msg"></p>
+        </div>
+        <div class="rule">
+          <label for="rule-risk">Risk per trade, % of cash</label>
+          <input id="rule-risk" class="fig" type="text" inputmode="decimal">
+          <p class="field-msg" id="rule-risk-msg"></p>
+        </div>
+        <div class="rule">
+          <label for="rule-stop">Stop distance, %</label>
+          <input id="rule-stop" class="fig" type="text" inputmode="decimal">
+          <p class="field-msg" id="rule-stop-msg"></p>
         </div>
         <button type="submit" class="quiet">Save rules</button>
       </form>

@@ -4,7 +4,7 @@
 const STORAGE_KEY = "paper-trader-v1";
 const COINGECKO = "https://api.coingecko.com/api/v3";
 
-const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500 };
+const DEFAULT_RULES = { startingCash: 10000, maxTrades: 5, lossLimit: 500, riskPct: 1, stopPct: 5 };
 
 let state = {
   cash: DEFAULT_RULES.startingCash,
@@ -12,6 +12,8 @@ let state = {
   trades: [],    // { id, time, coinId, symbol, side, units, price, dollars, realized }
   rules: { ...DEFAULT_RULES },
   selected: null, // the coin id, like "bitcoin"
+  orders: [],     // { id, coinId, symbol, name, type, price, dollars, created }
+  equity: [],     // [[timeMs, portfolioValue], ...] for the performance chart
 };
 
 // Fetched, not saved.
@@ -36,6 +38,8 @@ function load() {
       state.positions = Array.isArray(saved.positions) ? saved.positions : [];
       state.trades = Array.isArray(saved.trades) ? saved.trades : [];
       state.rules = { ...DEFAULT_RULES, ...saved.rules };
+      state.orders = Array.isArray(saved.orders) ? saved.orders : [];
+      state.equity = Array.isArray(saved.equity) ? saved.equity : [];
       state.selected = saved.selected || null;
       selectedCoin = saved.selectedCoin || null;
     }
@@ -145,6 +149,19 @@ const els = {
   chart: $("chart"),
   chartStatus: $("chart-status"),
   ranges: document.querySelectorAll(".range"),
+  sizer: $("sizer"),
+  orderForm: $("order-form"),
+  orderType: $("order-type"),
+  orderPrice: $("order-price"),
+  orderDollars: $("order-dollars"),
+  orderBtn: $("order-btn"),
+  orderMsg: $("order-msg"),
+  ordersList: $("orders-list"),
+  equity: $("equity"),
+  stats: $("stats"),
+  exportBtn: $("export-btn"),
+  ruleRisk: $("rule-risk"),
+  ruleStop: $("rule-stop"),
 };
 
 function show(el, on) {
@@ -190,8 +207,10 @@ async function fetchPrices() {
       };
     }
     lastPriceAt = new Date();
+    recordEquity(false);
     render();
     flashPrice(before);
+    checkOrders();
   } catch (err) {
     if (firstTime) {
       setCoinView("error", "Could not reach CoinGecko. Check your connection and retry.");
@@ -441,8 +460,80 @@ function headlineMood() {
 
 // ---------- Trading ----------
 
+// Pending orders, checked on every price update, live tick or poll.
 function checkOrders() {
-  // Pending orders are checked here on every price update.
+  let filled = false;
+  for (const o of state.orders.slice()) {
+    const q = prices[o.coinId];
+    if (!q) continue;
+    const coin = { id: o.coinId, name: o.name, symbol: o.symbol };
+    const pos = positionFor(o.coinId);
+    if (blockReason()) continue; // my rules hold the order until tomorrow
+    if (o.type === "limit-buy" && q.price <= o.price) {
+      if (o.dollars > state.cash) continue; // not enough cash: it waits
+      buy(o.dollars, coin, "Limit");
+    } else if (o.type === "stop-loss" && pos && q.price <= o.price) {
+      sell(pos.units * q.price, coin, "Stop-loss");
+    } else if (o.type === "take-profit" && pos && q.price >= o.price) {
+      sell(pos.units * q.price, coin, "Take-profit");
+    } else {
+      continue;
+    }
+    state.orders = state.orders.filter((x) => x.id !== o.id);
+    filled = true;
+  }
+  if (filled) {
+    save();
+    render();
+  }
+}
+
+function placeOrder(type, price, dollars) {
+  state.orders.push({
+    id: Date.now(),
+    coinId: selectedCoin.id,
+    symbol: selectedCoin.symbol,
+    name: selectedCoin.name,
+    type,
+    price,
+    dollars: type === "limit-buy" ? dollars : null,
+    created: new Date().toISOString(),
+  });
+  save();
+  render();
+}
+
+function cancelOrder(id) {
+  state.orders = state.orders.filter((o) => o.id !== id);
+  save();
+  render();
+}
+
+// Portfolio value right now, for the header and the equity curve.
+function portfolioTotal() {
+  return state.cash + state.positions.reduce((sum, p) => sum + positionValue(p), 0);
+}
+
+// One point per minute at most, plus one on every trade. Capped at 1,000
+// points by dropping every other old point, so the curve never grows forever.
+function recordEquity(force) {
+  const now = Date.now();
+  const last = state.equity[state.equity.length - 1];
+  if (!force && last && now - last[0] < 60 * 1000) return;
+  state.equity.push([now, Math.round(portfolioTotal() * 100) / 100]);
+  if (state.equity.length > 1000) {
+    const old = state.equity.slice(0, 800).filter((_, i) => i % 2 === 0);
+    state.equity = old.concat(state.equity.slice(800));
+  }
+  save();
+}
+
+// How big a position my rules suggest: risk a share of cash, with the stop a
+// share of the position away. Position = risk dollars / stop share.
+function suggestedSize() {
+  const risk = state.cash * (state.rules.riskPct / 100);
+  const size = risk / (state.rules.stopPct / 100);
+  return Math.min(size, state.cash);
 }
 
 function readAmount(input, msgEl) {
@@ -479,40 +570,43 @@ function blockReason() {
   return null;
 }
 
-function logTrade(side, units, price, dollars, realized) {
+function logTrade(coin, side, units, price, dollars, realized, via) {
   state.trades.unshift({
-    id: Date.now(),
+    id: Date.now() + Math.random(),
     time: new Date().toISOString(),
-    coinId: selectedCoin.id,
-    symbol: selectedCoin.symbol,
+    coinId: coin.id,
+    symbol: coin.symbol,
     side,
     units,
     price,
     dollars,
     realized,
+    via: via || null, // "Limit", "Stop-loss" or "Take-profit" when an order filled it
   });
 }
 
-function buy(dollars) {
-  const price = prices[state.selected].price;
+function buy(dollars, coin = selectedCoin, via) {
+  const price = prices[coin.id].price;
   const units = dollars / price;
-  const pos = positionFor(state.selected);
+  const pos = positionFor(coin.id);
   if (pos) {
     // New average price: total paid so far plus this buy, over total units.
     pos.avgPrice = (pos.avgPrice * pos.units + dollars) / (pos.units + units);
     pos.units += units;
   } else {
-    state.positions.push({ ...selectedCoin, units, avgPrice: price });
+    state.positions.push({ id: coin.id, name: coin.name, symbol: coin.symbol, units, avgPrice: price });
   }
   state.cash -= dollars;
-  logTrade("Buy", units, price, dollars, null);
+  logTrade(coin, "Buy", units, price, dollars, null, via);
+  recordEquity(true);
   save();
   render();
+  watchLive();
 }
 
-function sell(dollars) {
-  const price = prices[state.selected].price;
-  const pos = positionFor(state.selected);
+function sell(dollars, coin = selectedCoin, via) {
+  const price = prices[coin.id].price;
+  const pos = positionFor(coin.id);
   const units = Math.min(dollars / price, pos.units);
   const got = units * price;
   const realized = (price - pos.avgPrice) * units;
@@ -521,15 +615,19 @@ function sell(dollars) {
     state.positions = state.positions.filter((p) => p !== pos);
   }
   state.cash += got;
-  logTrade("Sell", units, price, got, realized);
+  logTrade(coin, "Sell", units, price, got, realized, via);
+  recordEquity(true);
   save();
   render();
+  watchLive();
 }
 
 function startOver() {
   state.cash = state.rules.startingCash;
   state.positions = [];
   state.trades = [];
+  state.orders = [];
+  state.equity = [[Date.now(), state.rules.startingCash]];
   save();
   render();
   fetchPrices();
@@ -653,6 +751,15 @@ function renderTrade() {
   els.sellAmount.disabled = !ready || Boolean(reason) || !pos;
   els.sellBtn.disabled = !ready || Boolean(reason) || !pos;
   els.sellAllBtn.disabled = !ready || Boolean(reason) || !pos;
+  // Orders need a coin and a price, and a position for the sell types.
+  const orderable = ready && !reason;
+  els.orderType.disabled = !orderable;
+  els.orderPrice.disabled = !orderable;
+  els.orderDollars.disabled = !orderable || els.orderType.value !== "limit-buy";
+  els.orderBtn.disabled = !orderable;
+  show(els.orderDollars, els.orderType.value === "limit-buy");
+  renderSizer(ready);
+  renderOrders();
   if (reason) {
     els.tradeNote.textContent = reason;
     els.tradeNote.className = "note block";
@@ -661,6 +768,88 @@ function renderTrade() {
     els.tradeNote.textContent = warning;
     els.tradeNote.className = warning ? "note warn" : "note";
   }
+}
+
+function renderSizer(ready) {
+  els.sizer.replaceChildren();
+  if (!ready) return;
+  const size = suggestedSize();
+  els.sizer.appendChild(document.createTextNode(`· by my rules ${fmtMoney(size)}`));
+  const use = el("button", "Use", "quiet");
+  use.type = "button";
+  use.title = `${state.rules.riskPct}% of cash at risk with a ${state.rules.stopPct}% stop`;
+  use.addEventListener("click", () => {
+    els.buyAmount.value = size.toFixed(2);
+    els.buyMsg.textContent = "";
+    els.buyAmount.classList.remove("invalid");
+    els.buyAmount.focus();
+  });
+  els.sizer.appendChild(use);
+}
+
+const ORDER_WORDS = { "limit-buy": "Buy", "stop-loss": "Sell all if it falls to", "take-profit": "Sell all if it rises to" };
+
+function renderOrders() {
+  els.ordersList.replaceChildren();
+  for (const o of state.orders) {
+    const li = document.createElement("li");
+    const text = o.type === "limit-buy"
+      ? `Buy ${fmtMoney(o.dollars)} of ${o.symbol} when it drops to ${fmtMoney(o.price)}`
+      : `${ORDER_WORDS[o.type]} ${fmtMoney(o.price)} · ${o.symbol}`;
+    li.appendChild(el("span", text));
+    const cancel = el("button", "Cancel", "cancel");
+    cancel.type = "button";
+    cancel.dataset.id = o.id;
+    li.appendChild(cancel);
+    els.ordersList.appendChild(li);
+  }
+}
+
+function maxDrawdown(points) {
+  let peak = -Infinity, worst = 0;
+  for (const [, v] of points) {
+    if (v > peak) peak = v;
+    const dd = peak > 0 ? (peak - v) / peak : 0;
+    if (dd > worst) worst = dd;
+  }
+  return worst * 100;
+}
+
+function renderPerformance() {
+  const sells = state.trades.filter((t) => t.side === "Sell" && t.realized != null);
+  const wins = sells.filter((t) => t.realized > 0);
+  const losses = sells.filter((t) => t.realized < 0);
+  const sum = (arr) => arr.reduce((a, t) => a + t.realized, 0);
+  const realized = sum(sells);
+  const unrealized = state.positions.reduce((a, p) => a + positionValue(p) - p.units * p.avgPrice, 0);
+  const grossWin = sum(wins), grossLoss = Math.abs(sum(losses));
+  const best = sells.length ? Math.max(...sells.map((t) => t.realized)) : null;
+  const worst = sells.length ? Math.min(...sells.map((t) => t.realized)) : null;
+  const items = [
+    ["Realized P&L", fmtSigned(realized), upDown(realized)],
+    ["Unrealized P&L", fmtSigned(unrealized), upDown(unrealized)],
+    ["Win rate", sells.length ? `${Math.round((wins.length / sells.length) * 100)}% of ${sells.length}` : "—"],
+    ["Avg win", wins.length ? fmtSigned(grossWin / wins.length) : "—", "up"],
+    ["Avg loss", losses.length ? fmtSigned(-grossLoss / losses.length) : "—", "down"],
+    ["Profit factor", grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : wins.length ? "∞" : "—"],
+    ["Best trade", best == null ? "—" : fmtSigned(best), best == null ? "" : upDown(best)],
+    ["Worst trade", worst == null ? "—" : fmtSigned(worst), worst == null ? "" : upDown(worst)],
+    ["Max drawdown", state.equity.length > 1 ? `${maxDrawdown(state.equity).toFixed(1)}%` : "—"],
+  ];
+  els.stats.replaceChildren();
+  for (const [label, value, cls] of items) {
+    const div = document.createElement("div");
+    div.appendChild(el("dt", label));
+    div.appendChild(el("dd", value, "fig " + (cls || "")));
+    els.stats.appendChild(div);
+  }
+  const points = state.equity.slice();
+  points.push([Date.now(), portfolioTotal()]);
+  drawLineChart(els.equity, points, {
+    fmt: (v) => fmtMoney(v),
+    fmtTime: (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+  });
 }
 
 function positionValue(p) {
@@ -712,10 +901,17 @@ function renderTrades() {
     const time = when.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
       when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     els.tradesBody.appendChild(row([
-      time, [t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
+      time, [t.via ? `${t.side} · ${t.via}` : t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
       t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
     ]));
   }
+  show(els.exportBtn, any);
+}
+
+function tradesCsv() {
+  const head = ["time", "side", "via", "coin", "units", "price", "dollars", "realized"];
+  const rows = state.trades.map((t) => [t.time, t.side, t.via || "", t.symbol, t.units, t.price, t.dollars, t.realized == null ? "" : t.realized]);
+  return [head, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 
 function renderMood() {
@@ -762,11 +958,13 @@ function renderNews() {
 
 function renderRules() {
   const r = state.rules;
-  els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit.`;
+  els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit, ${r.riskPct}% risk with a ${r.stopPct}% stop.`;
   if (!els.rulesBox.open) {
     els.ruleCash.value = r.startingCash;
     els.ruleTrades.value = r.maxTrades;
     els.ruleLoss.value = r.lossLimit;
+    els.ruleRisk.value = r.riskPct;
+    els.ruleStop.value = r.stopPct;
   }
 }
 
@@ -780,6 +978,7 @@ function render() {
   renderRules();
   renderTape();
   renderChart();
+  renderPerformance();
 }
 
 // ---------- Events ----------
@@ -857,20 +1056,80 @@ els.sellAllBtn.addEventListener("click", () => {
   els.sellAmount.value = "";
 });
 
+els.orderType.addEventListener("change", renderTrade);
+
+els.orderForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const type = els.orderType.value;
+  const q = prices[state.selected];
+  const price = Number(els.orderPrice.value.trim());
+  if (els.orderPrice.value.trim() === "" || !Number.isFinite(price) || price <= 0) {
+    els.orderMsg.textContent = "Enter a price above 0.";
+    return;
+  }
+  let dollars = null;
+  if (type === "limit-buy") {
+    dollars = readAmount(els.orderDollars, els.orderMsg);
+    if (dollars == null) return;
+    if (dollars > state.cash) {
+      els.orderMsg.textContent = `You have ${fmtMoney(state.cash)} in cash.`;
+      return;
+    }
+    if (price >= q.price) {
+      els.orderMsg.textContent = `That is above the price now, ${fmtMoney(q.price)}. Just buy.`;
+      return;
+    }
+  } else {
+    if (!positionFor(state.selected)) {
+      els.orderMsg.textContent = `You do not hold any ${selectedCoin.symbol}.`;
+      return;
+    }
+    if (type === "stop-loss" && price >= q.price) {
+      els.orderMsg.textContent = `A stop goes below the price now, ${fmtMoney(q.price)}.`;
+      return;
+    }
+    if (type === "take-profit" && price <= q.price) {
+      els.orderMsg.textContent = `A take-profit goes above the price now, ${fmtMoney(q.price)}.`;
+      return;
+    }
+  }
+  els.orderMsg.textContent = "";
+  placeOrder(type, price, dollars);
+  els.orderPrice.value = "";
+  els.orderDollars.value = "";
+});
+
+els.ordersList.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cancel");
+  if (btn) cancelOrder(Number(btn.dataset.id));
+});
+
+els.exportBtn.addEventListener("click", () => {
+  const blob = new Blob([tradesCsv()], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `paper-trades-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// [key, input, message, whole number?]
 const RULE_FIELDS = [
-  ["startingCash", els.ruleCash, $("rule-cash-msg")],
-  ["maxTrades", els.ruleTrades, $("rule-trades-msg")],
-  ["lossLimit", els.ruleLoss, $("rule-loss-msg")],
+  ["startingCash", els.ruleCash, $("rule-cash-msg"), true],
+  ["maxTrades", els.ruleTrades, $("rule-trades-msg"), true],
+  ["lossLimit", els.ruleLoss, $("rule-loss-msg"), true],
+  ["riskPct", els.ruleRisk, $("rule-risk-msg"), false],
+  ["stopPct", els.ruleStop, $("rule-stop-msg"), false],
 ];
 
 els.rulesForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const next = {};
   let ok = true;
-  for (const [key, input, msg] of RULE_FIELDS) {
+  for (const [key, input, msg, whole] of RULE_FIELDS) {
     const n = Number(input.value.trim());
-    if (input.value.trim() === "" || !Number.isInteger(n) || n <= 0) {
-      msg.textContent = "Use a whole number above 0.";
+    if (input.value.trim() === "" || !Number.isFinite(n) || n <= 0 || (whole && !Number.isInteger(n)) || (!whole && n > 100)) {
+      msg.textContent = whole ? "Use a whole number above 0." : "Use a number above 0, up to 100.";
       input.classList.add("invalid");
       ok = false;
     } else {

@@ -347,6 +347,74 @@ label {
   gap: 12px;
 }
 
+/* Sizer, orders */
+
+label[for="buy-amount"] { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.sizer { color: var(--text-muted); white-space: nowrap; }
+.sizer button { height: 24px; padding: 0 8px; font-size: 13px; margin-left: 6px; vertical-align: middle; }
+
+select {
+  flex: 1;
+  min-width: 0;
+  height: var(--control);
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--small);
+  color: var(--text);
+  background: var(--well);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+}
+
+select:focus { border-color: var(--up); outline: 2px solid var(--up); outline-offset: 0; }
+select:disabled { opacity: 0.4; }
+
+.order { margin-top: 16px; }
+.order #order-price, .order #order-dollars { flex: 0 1 120px; }
+
+.orders {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.orders li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--small);
+}
+
+.orders .cancel {
+  height: auto;
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  text-decoration: underline;
+  font-size: var(--small);
+}
+
+.orders .cancel:hover { color: var(--down); }
+
+/* Performance */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 20px;
+  margin: 14px 0 0;
+}
+
+.stats div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--hairline); padding-bottom: 6px; }
+.stats dt { color: var(--text-muted); font-size: var(--small); }
+.stats dd { margin: 0; font-size: var(--small); }
+
+.section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.section-head h2 { margin-bottom: 12px; }
+
 /* Mood */
 
 .mood { display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: baseline; }
@@ -455,7 +523,8 @@ label {
 
   .foot { flex-direction: row; justify-content: space-between; align-items: flex-start; }
   .rules-box { flex: 1; }
-  .rules { grid-template-columns: repeat(3, 1fr) auto; align-items: end; }
+  .rules { grid-template-columns: repeat(5, 1fr) auto; align-items: end; }
+  .stats { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
