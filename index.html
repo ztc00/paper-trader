@@ -209,7 +209,7 @@
       </section>
 
       <section class="block orders-block" aria-labelledby="h-orders">
-        <h2 id="h-orders">Working orders</h2>
+        <h2 id="h-orders">Working orders <span class="muted fig count" id="orders-count"></span></h2>
         <p class="muted" id="orders-empty">None. A limit, stop or trailing order waits here until the price gets there.</p>
         <ul class="orders" id="orders-list" aria-label="Working orders"></ul>
         <details class="history" id="history">
@@ -221,6 +221,7 @@
               <tbody id="history-body"></tbody>
             </table>
           </div>
+          <button type="button" class="quiet small" id="history-more" hidden>Show all</button>
         </details>
       </section>
 

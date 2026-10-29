@@ -48,7 +48,10 @@
   --on-up: #FFFFFF;
 }
 
-* { box-sizing: border-box; }
+/* Native controls and scrollbars follow the theme. */
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing: border-box; scrollbar-color: var(--edge) transparent; }
 
 html { background: var(--bg); }
 
@@ -502,6 +505,8 @@ label .seg { margin-left: 8px; vertical-align: middle; }
 .tape-tabs { flex-shrink: 0; }
 
 .history { margin-top: 12px; }
+.history #history-more { margin-top: 8px; }
+h2 .count { margin-left: 6px; font-size: 13px; letter-spacing: 0; text-transform: none; }
 .history summary { cursor: pointer; font-size: var(--small); color: var(--text-muted); list-style: none; display: flex; gap: 8px; }
 .history summary::-webkit-details-marker { display: none; }
 .history summary::before { content: "▸"; }
@@ -833,8 +838,9 @@ select:disabled { opacity: 0.4; }
     top: 0;
     max-height: 100vh;
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: 6px;
     scrollbar-width: thin;
+    scrollbar-gutter: stable;
   }
 
   .mobile-bar { display: none; }

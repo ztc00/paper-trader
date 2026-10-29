@@ -60,6 +60,7 @@ const els = {
   ordersEmpty: $("orders-empty"),
   ordersList: $("orders-list"),
   historyCount: $("history-count"), historyEmpty: $("history-empty"), historyTable: $("history-table"), historyBody: $("history-body"),
+  historyMore: $("history-more"), ordersCount: $("orders-count"),
   cash: $("cash"),
   positionsEmpty: $("positions-empty"),
   positionsTable: $("positions-table"),
@@ -743,13 +744,37 @@ function renderCoin() {
   renderUpdated();
 }
 
+// US stocks trade 9:30 to 4:00 New York time, Monday to Friday. (Holidays
+// are not known here; on one the price simply does not move.)
+function nyNow() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hour12: false }).formatToParts(new Date());
+  const get = (t) => parts.find((p) => p.type === t).value;
+  return { day: get("weekday"), minutes: Number(get("hour")) % 24 * 60 + Number(get("minute")) };
+}
+
+function marketOpen() {
+  const { day, minutes } = nyNow();
+  return !["Sat", "Sun"].includes(day) && minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+}
+
+function nextOpenWords() {
+  const { day, minutes } = nyNow();
+  if (day === "Fri" && minutes >= 16 * 60) return "Monday 9:30 ET";
+  if (day === "Sat") return "Monday 9:30 ET";
+  if (day === "Sun" || minutes >= 16 * 60) return "tomorrow 9:30 ET";
+  return "9:30 ET";
+}
+
 // "Live · Coinbase" with a green dot when ticks are coming in for this coin,
 // otherwise when CoinGecko last answered.
 function renderUpdated() {
   if (!selectedCoin || !prices[state.selected]) return;
   els.coinUpdated.replaceChildren();
   if (isStock(state.selected)) {
-    els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)} · Finnhub, every 15s`;
+    const open = marketOpen();
+    els.coinUpdated.textContent = open
+      ? `Updated ${timeAgo(lastPriceAt)} · Finnhub, every 15s`
+      : `Market closed · last price from Finnhub · opens ${nextOpenWords()}`;
   } else if (liveHas(selectedCoin.symbol) && liveAt && Date.now() - liveAt.getTime() < 90 * 1000) {
     els.coinUpdated.appendChild(el("span", "", "live-dot"));
     els.coinUpdated.appendChild(document.createTextNode(`Live · Coinbase · ${timeAgo(liveAt)}`));
@@ -946,8 +971,11 @@ function renderSizer() {
   els.sizer.appendChild(use);
 }
 
+let historyAll = false;
+
 function renderOrders() {
   show(els.ordersEmpty, state.orders.length === 0);
+  els.ordersCount.textContent = state.orders.length ? String(state.orders.length) : "";
   els.ordersList.replaceChildren();
   for (const o of state.orders) {
     const li = document.createElement("li");
@@ -963,7 +991,8 @@ function renderOrders() {
   show(els.historyEmpty, h.length === 0);
   show(els.historyTable, h.length > 0);
   els.historyBody.replaceChildren();
-  for (const o of h.slice(0, 30)) {
+  show(els.historyMore, h.length > 30 && !historyAll);
+  for (const o of h.slice(0, historyAll ? h.length : 30)) {
     const size = o.qty != null ? fmtUnits(o.qty) : o.all ? "all" : fmtMoney(o.dollars);
     els.historyBody.appendChild(row([
       fmtWhen(o.closed), [`${o.side} ${ORDER_NAMES[o.type]}`, o.side === "Buy" ? "up" : "down"], o.symbol, size,
@@ -1263,6 +1292,8 @@ els.ordersList.addEventListener("click", (e) => {
   const btn = e.target.closest(".cancel");
   if (btn) cancelOrder(Number(btn.dataset.id));
 });
+
+els.historyMore.addEventListener("click", () => { historyAll = true; renderOrders(); });
 
 // Sell…: the position goes into the ticket on the Sell side, all of it, at
 // the market, ready to review. Close: sold at the market right away.
