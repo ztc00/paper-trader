@@ -26,11 +26,15 @@ function render() {
   const sincePct = (since / state.rules.startingCash) * 100;
   const todayRealized = state.trades.filter((t) => isToday(t.time)).reduce((a, t) => a + (t.realized || 0), 0);
   // Today's move on what I hold: each position's value now against its
-  // value at the day's open (or 24 hours ago for a coin).
+  // value at the day's open (24 hours ago for a coin). A position bought
+  // today counts from what I paid, not from a price I never held it at.
   const todayOpen = state.positions.reduce((a, p) => {
     const q = prices[p.id];
-    if (!q || !Number.isFinite(q.change24h)) return a;
+    if (!q) return a;
     const v = p.units * q.price;
+    const boughtToday = state.trades.some((t) => t.coinId === p.id && t.side === "Buy" && isToday(t.time));
+    if (boughtToday) return a + (v - p.units * p.avgPrice);
+    if (!Number.isFinite(q.change24h)) return a;
     return a + (v - v / (1 + q.change24h / 100));
   }, 0);
   const today = todayRealized + todayOpen;
