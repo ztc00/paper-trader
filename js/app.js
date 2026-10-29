@@ -18,6 +18,7 @@ let state = {
 let prices = {};      // coin id -> { price, change24h, change7d }
 let selectedCoin = null; // { id, name, symbol }
 let lastPriceAt = null;
+let mood = null;   // { value, label } from the Fear & Greed index
 
 // ---------- Save and load ----------
 
@@ -119,6 +120,13 @@ const els = {
   ruleTrades: $("rule-trades"),
   ruleLoss: $("rule-loss"),
   startOver: $("start-over"),
+  moodLoading: $("mood-loading"),
+  moodError: $("mood-error"),
+  moodErrorText: $("mood-error-text"),
+  moodRetry: $("mood-retry"),
+  moodBody: $("mood-body"),
+  fngValue: $("fng-value"),
+  fngLabel: $("fng-label"),
 };
 
 function show(el, on) {
@@ -220,6 +228,28 @@ function selectCoin(coin) {
   els.searchInput.value = "";
   render();
   fetchPrices();
+}
+
+// ---------- Mood: the Crypto Fear & Greed Index ----------
+
+async function fetchMood() {
+  show(els.moodLoading, true);
+  show(els.moodError, false);
+  show(els.moodBody, false);
+  try {
+    const response = await fetch("https://api.alternative.me/fng/?limit=1");
+    if (!response.ok) throw new Error(`alternative.me answered ${response.status}`);
+    const data = await response.json();
+    const today = data.data[0];
+    mood = { value: Number(today.value), label: today.value_classification };
+    show(els.moodLoading, false);
+    show(els.moodBody, true);
+    render();
+  } catch (err) {
+    show(els.moodLoading, false);
+    show(els.moodError, true);
+    els.moodErrorText.textContent = "Mood is not available right now.";
+  }
 }
 
 // ---------- Trading ----------
@@ -361,8 +391,9 @@ function renderTrade() {
     els.tradeNote.textContent = reason;
     els.tradeNote.className = "note block";
   } else {
-    els.tradeNote.textContent = "";
-    els.tradeNote.className = "note";
+    const warning = ready ? moodWarning() : "";
+    els.tradeNote.textContent = warning;
+    els.tradeNote.className = warning ? "note warn" : "note";
   }
 }
 
@@ -421,6 +452,20 @@ function renderTrades() {
   }
 }
 
+function renderMood() {
+  if (!mood) return;
+  els.fngValue.textContent = mood.value;
+  els.fngLabel.textContent = mood.label;
+  els.fngValue.className = "mood-number fig " + (mood.value <= 25 ? "down" : mood.value >= 75 ? "up" : "");
+}
+
+// The amber line under the Buy button. A warning never blocks.
+function moodWarning() {
+  const parts = [];
+  if (mood && mood.value <= 25) parts.push(`Market is in ${mood.label} (${mood.value}).`);
+  return parts.join(" ");
+}
+
 function renderRules() {
   const r = state.rules;
   els.rulesSummary.textContent = `${fmtMoney(r.startingCash).replace(".00", "")} to start, ${r.maxTrades} trades a day, ${fmtMoney(r.lossLimit).replace(".00", "")} daily loss limit.`;
@@ -436,6 +481,7 @@ function render() {
   renderTrade();
   renderPortfolio();
   renderTrades();
+  renderMood();
   renderRules();
 }
 
@@ -537,12 +583,14 @@ els.rulesBox.addEventListener("toggle", () => {
 });
 
 els.startOver.addEventListener("click", startOver);
+els.moodRetry.addEventListener("click", fetchMood);
 
 // ---------- Start ----------
 
 load();
 render();
 fetchPrices();
+fetchMood();
 setInterval(fetchPrices, 60 * 1000);
 setInterval(() => {
   if (lastPriceAt && state.selected && prices[state.selected]) {
