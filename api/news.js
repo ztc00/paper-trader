@@ -43,7 +43,7 @@ export default {
 
     const brief = articles.length ? await readHeadlines(q, articles.map((a) => a.title)) : null;
 
-    return Response.json({ articles, brief }, {
+    return Response.json({ articles, brief, briefError: brief ? undefined : lastBriefError }, {
       headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600" },
     });
   },
@@ -52,9 +52,12 @@ export default {
 // Ask the model for a two-sentence brief and a one-word sentiment. Answers
 // null when there is no key or anything goes wrong, so the page still shows
 // the headlines and my own word-list score.
+let lastBriefError = null;
+
 async function readHeadlines(coin, titles) {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return null;
+  lastBriefError = null;
+  if (!key) { lastBriefError = "no key"; return null; }
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -73,14 +76,15 @@ async function readHeadlines(coin, titles) {
       }),
       signal: AbortSignal.timeout(9000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) { lastBriefError = `openrouter ${response.status}: ${(await response.text()).slice(0, 200)}`; return null; }
     const data = await response.json();
     const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    if (!text) return null;
+    if (!text) { lastBriefError = "empty answer: " + JSON.stringify(data).slice(0, 200); return null; }
     const json = JSON.parse(text.replace(/^```json\s*|```$/g, "").trim());
     const sentiment = ["positive", "mixed", "negative"].includes(json.sentiment) ? json.sentiment : "mixed";
     return { text: String(json.brief || "").slice(0, 400), sentiment, model: MODEL };
-  } catch {
+  } catch (err) {
+    lastBriefError = "threw: " + String(err.message).slice(0, 200);
     return null;
   }
 }
