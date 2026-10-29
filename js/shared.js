@@ -37,6 +37,7 @@ let state = {
   equity: [],     // [[timeMs, portfolioValue], ...] for the performance chart
   market: "crypto", // which tab the search and tape show: "crypto" or "stocks"
   watchlist: [],  // [{ id, name, symbol }] starred on the desk
+  alerts: [],     // [{ id, coinId, symbol, name, price, above, created }] one-shot price alerts
 };
 
 let selectedCoin = null; // { id, name, symbol } for state.selected
@@ -53,6 +54,7 @@ function load() {
       state.orders = (Array.isArray(saved.orders) ? saved.orders : []).map(upgradeOrder);
       state.orderHistory = Array.isArray(saved.orderHistory) ? saved.orderHistory : [];
       state.watchlist = Array.isArray(saved.watchlist) ? saved.watchlist : [];
+      state.alerts = Array.isArray(saved.alerts) ? saved.alerts : [];
       state.equity = Array.isArray(saved.equity) ? saved.equity : [];
       state.selected = saved.selected || null;
       state.market = saved.market === "stocks" ? "stocks" : "crypto";

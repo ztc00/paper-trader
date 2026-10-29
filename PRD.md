@@ -212,6 +212,19 @@ confirmation, no order history, no watchlist, no one-click close. Version 4:
 40. **Watchlist sparklines** on the tape, from the same CoinGecko call that
     brings the prices.
 
+41. **Price alerts.** Under the price: "Alert me at" a price, Set alert. The
+    alert is above or below by where the price is now, shows as a chip
+    with an × to remove, and fires once when the live price crosses it: a
+    toast, and a browser notification if the browser allows them (asked
+    for the first time an alert is set). Alerts are saved with the state.
+42. **Market hours.** On a stock outside 9:30 to 4:00 New York time, the line
+    under the price says "Market closed · last price from Finnhub · opens
+    tomorrow 9:30 ET" (or Monday). Holidays are not known; the price just
+    stands still.
+43. Scrollbars and native controls follow the theme (`color-scheme`). The
+    Working orders heading carries a count. The order history shows 30 rows
+    with Show all.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;

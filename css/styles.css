@@ -421,6 +421,14 @@ label {
 .coin-price-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
 .coin-price-row .price { margin: 0; }
 .range-change { font-size: var(--small); margin-left: 6px; align-self: center; }
+
+.alert-form { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.alert-form label { margin: 0; }
+.alert-form input { flex: 0 1 140px; height: 36px; }
+.alert-form .field-msg.inline { min-height: 0; margin: 0; }
+.alerts { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.alerts li { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--edge); border-radius: 999px; font-size: 13px; }
+.alerts .cancel { height: auto; padding: 0; border: 0; color: var(--text-muted); font-size: 13px; }
 .mood-line { font-size: var(--small); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; margin-bottom: 12px; }
 .mood-line .fig { font-size: var(--body); }
 .link { color: var(--text-muted); text-decoration: underline; font-size: var(--small); }

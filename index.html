@@ -88,6 +88,13 @@
             <p class="price fig" id="coin-price"></p>
             <p class="muted fig" id="coin-change"></p>
           </div>
+          <form class="alert-form" id="alert-form" novalidate>
+            <label for="alert-price" class="muted">Alert me at</label>
+            <input id="alert-price" class="fig" type="text" inputmode="decimal" placeholder="price">
+            <button type="submit" class="quiet small">Set alert</button>
+            <span class="field-msg inline" id="alert-msg"></span>
+          </form>
+          <ul class="alerts" id="alerts-list" aria-label="Price alerts"></ul>
           <div class="chart-head">
             <div class="ranges" role="group" aria-label="Chart range">
               <button type="button" class="quiet small range" data-days="1">1D</button>

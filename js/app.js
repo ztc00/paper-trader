@@ -106,6 +106,7 @@ const els = {
   marquee: $("marquee"),
   tapeTabs: document.querySelectorAll(".tape-tabs .seg-btn"),
   rangeChange: $("range-change"),
+  alertForm: $("alert-form"), alertPrice: $("alert-price"), alertMsg: $("alert-msg"), alertsList: $("alerts-list"),
   starText: $("star-text"),
   mBuy: $("m-buy"),
   mSell: $("m-sell"),
@@ -127,6 +128,7 @@ function wantedIds() {
   const ids = new Set(state.positions.map((p) => p.id));
   for (const o of state.orders) ids.add(o.coinId);
   for (const w of state.watchlist) ids.add(w.id);
+  for (const a of state.alerts) ids.add(a.coinId);
   if (state.selected) ids.add(state.selected);
   return [...ids];
 }
@@ -155,6 +157,7 @@ function pricesLanded(before) {
   render();
   flashPrice(before);
   checkOrders();
+  checkAlerts();
 }
 
 function priceFailed(firstTime, message) {
@@ -326,6 +329,7 @@ function applyTick(symbol, price, bid, ask) {
     renderChart();
     renderTicket();
     checkOrders();
+    checkAlerts();
     if (sel && was != null && was !== sel.price) flashPrice(was);
     if (sel) sel.liveBefore = sel.price;
   }, 200);
@@ -550,6 +554,40 @@ function checkOrders() {
     save();
     render();
     watchLive();
+  }
+}
+
+// One-shot price alerts: a toast, and a browser notification if allowed,
+// when the price crosses the level. The alert is then gone.
+function checkAlerts() {
+  let changed = false;
+  for (const a of state.alerts.slice()) {
+    const q = prices[a.coinId];
+    if (!q) continue;
+    const hit = a.above ? q.price >= a.price : q.price <= a.price;
+    if (!hit) continue;
+    state.alerts = state.alerts.filter((x) => x.id !== a.id);
+    const text = `${a.symbol} is ${a.above ? "above" : "below"} ${fmtMoney(a.price)}: ${fmtMoney(q.price)} now.`;
+    toast(text, "warn");
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { new Notification("Paper Trader", { body: text }); } catch { /* blocked */ }
+    }
+    changed = true;
+  }
+  if (changed) { save(); renderAlerts(); }
+}
+
+function renderAlerts() {
+  els.alertsList.replaceChildren();
+  for (const a of state.alerts) {
+    const li = document.createElement("li");
+    li.appendChild(el("span", `${a.symbol} ${a.above ? "≥" : "≤"} ${fmtMoney(a.price)}`, "fig"));
+    const cancel = el("button", "×", "cancel");
+    cancel.type = "button";
+    cancel.setAttribute("aria-label", `Remove the ${a.symbol} alert`);
+    cancel.addEventListener("click", () => { state.alerts = state.alerts.filter((x) => x.id !== a.id); save(); renderAlerts(); });
+    li.appendChild(cancel);
+    els.alertsList.appendChild(li);
   }
 }
 
@@ -1173,6 +1211,7 @@ function render() {
   renderRules();
   renderTape();
   renderChart();
+  renderAlerts();
 }
 
 // ---------- Events ----------
@@ -1283,6 +1322,21 @@ els.tConfirm.addEventListener("click", () => {
 els.tEdit.addEventListener("click", () => { ticket.reviewing = false; renderTicket(); els.tQty.focus(); });
 
 els.starBtn.addEventListener("click", toggleWatch);
+
+els.alertForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = prices[state.selected];
+  const price = Number(els.alertPrice.value.trim());
+  if (!q || !(price > 0)) { els.alertMsg.textContent = "Enter a price above 0."; return; }
+  if (Math.abs(price - q.price) / q.price < 0.0005) { els.alertMsg.textContent = "That is the price now."; return; }
+  els.alertMsg.textContent = "";
+  state.alerts.push({ id: Date.now(), coinId: state.selected, symbol: selectedCoin.symbol, name: selectedCoin.name, price, above: price > q.price, created: new Date().toISOString() });
+  save();
+  els.alertPrice.value = "";
+  renderAlerts();
+  toast(`Alert set: ${selectedCoin.symbol} ${price > q.price ? "above" : "below"} ${fmtMoney(price)}.`);
+  if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+});
 
 for (const b of els.tapeTabs) {
   b.addEventListener("click", () => { tapeView = b.dataset.tape; renderTape(); });
