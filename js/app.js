@@ -125,6 +125,20 @@ function show(el, on) {
   el.hidden = !on;
 }
 
+// Text from an API goes in through textContent, never innerHTML.
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text != null) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function row(cells) {
+  const tr = document.createElement("tr");
+  for (const c of cells) tr.appendChild(Array.isArray(c) ? el("td", c[0], c[1]) : el("td", c));
+  return tr;
+}
+
 // ---------- Fetching from CoinGecko ----------
 
 // One request for the selected coin and every coin I hold.
@@ -190,7 +204,9 @@ function renderResults(matches) {
     btn.dataset.id = c.id;
     btn.dataset.name = c.name;
     btn.dataset.symbol = c.symbol.toUpperCase();
-    btn.innerHTML = `<span>${c.name}</span><span class="meta fig">${c.symbol.toUpperCase()}${c.market_cap_rank ? " · #" + c.market_cap_rank : ""}</span>`;
+    const rank = Number.isInteger(c.market_cap_rank) ? ` · #${c.market_cap_rank}` : "";
+    btn.appendChild(el("span", c.name));
+    btn.appendChild(el("span", c.symbol.toUpperCase() + rank, "meta fig"));
     li.appendChild(btn);
     els.results.appendChild(li);
   }
@@ -371,9 +387,10 @@ function renderPortfolio() {
     const pct = (gain / (p.units * p.avgPrice)) * 100;
     value += v;
     pnl += gain;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${p.symbol}</td><td>${fmtUnits(p.units)}</td><td>${fmtMoney(p.avgPrice)}</td><td>${q ? fmtMoney(price) : "—"}</td><td>${fmtMoney(v)}</td><td class="${upDown(gain)}">${fmtSigned(gain)} (${fmtPct(pct)})</td>`;
-    els.positionsBody.appendChild(tr);
+    els.positionsBody.appendChild(row([
+      p.symbol, fmtUnits(p.units), fmtMoney(p.avgPrice), q ? fmtMoney(price) : "—", fmtMoney(v),
+      [`${fmtSigned(gain)} (${fmtPct(pct)})`, upDown(gain)],
+    ]));
   }
   els.positionsValue.textContent = fmtMoney(value);
   els.positionsPnl.textContent = fmtSigned(pnl);
@@ -397,10 +414,10 @@ function renderTrades() {
     const when = new Date(t.time);
     const time = when.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
       when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const realized = t.realized == null ? "" : `<span class="${upDown(t.realized)}">${fmtSigned(t.realized)}</span>`;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${time}</td><td class="${t.side === "Buy" ? "up" : "down"}">${t.side}</td><td>${t.symbol}</td><td>${fmtUnits(t.units)}</td><td>${fmtMoney(t.price)}</td><td>${fmtMoney(t.dollars)}</td><td>${realized}</td>`;
-    els.tradesBody.appendChild(tr);
+    els.tradesBody.appendChild(row([
+      time, [t.side, t.side === "Buy" ? "up" : "down"], t.symbol, fmtUnits(t.units), fmtMoney(t.price), fmtMoney(t.dollars),
+      t.realized == null ? "" : [fmtSigned(t.realized), upDown(t.realized)],
+    ]));
   }
 }
 
