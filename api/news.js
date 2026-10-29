@@ -6,8 +6,12 @@
 
 export default {
   async fetch(request) {
-    const q = new URL(request.url).searchParams.get("q");
-    if (!q || q.length > 60) {
+    // Only letters, digits and spaces reach GNews, lowercased, so "Bitcoin",
+    // "bitcoin " and "BITCOIN" share one cached answer and nothing odd can be
+    // sent on through my key.
+    const raw = new URL(request.url).searchParams.get("q") || "";
+    const q = raw.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().slice(0, 30);
+    if (!q) {
       return Response.json({ error: "Say which coin." }, { status: 400 });
     }
 
@@ -17,7 +21,7 @@ export default {
     }
 
     const url = "https://gnews.io/api/v4/search"
-      + `?q=${encodeURIComponent(q + " crypto")}&lang=en&max=5&sortby=publishedAt&apikey=${key}`;
+      + `?q=${encodeURIComponent(q + " crypto")}&lang=en&max=5&sortby=publishedAt&apikey=${encodeURIComponent(key)}`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -25,12 +29,15 @@ export default {
     }
     const data = await response.json();
 
-    const articles = (data.articles || []).map((a) => ({
-      title: a.title,
-      url: a.url,
-      source: a.source && a.source.name,
-      publishedAt: a.publishedAt,
-    }));
+    // Keep only articles with a real web link.
+    const articles = (data.articles || [])
+      .filter((a) => /^https?:\/\//.test(a.url || ""))
+      .map((a) => ({
+        title: a.title,
+        url: a.url,
+        source: a.source && a.source.name,
+        publishedAt: a.publishedAt,
+      }));
 
     return Response.json({ articles }, {
       headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600" },

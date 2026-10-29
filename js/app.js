@@ -559,9 +559,9 @@ function renderNews() {
   for (const a of news) {
     const li = document.createElement("li");
     const link = el("a", a.title);
-    link.href = a.url;
+    if (/^https?:\/\//.test(a.url)) link.href = a.url;
     link.target = "_blank";
-    link.rel = "noopener";
+    link.rel = "noopener noreferrer";
     const score = scoreHeadline(a.title);
     const mark = score > 0 ? " · +1" : score < 0 ? " · −1" : " · 0";
     li.appendChild(link);
