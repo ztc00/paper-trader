@@ -18,6 +18,10 @@
     </p>
   </header>
 
+  <section class="tape-wrap" aria-label="Top coins">
+    <ul class="tape" id="tape"><li class="muted">Loading the top coins…</li></ul>
+  </section>
+
   <main class="layout">
     <div class="col left">
 
@@ -44,6 +48,16 @@
           <p class="price fig" id="coin-price"></p>
           <p class="muted fig" id="coin-change"></p>
           <p class="muted" id="coin-updated"></p>
+          <div class="chart-head">
+            <div class="ranges" role="group" aria-label="Chart range">
+              <button type="button" class="quiet small range" data-days="1">1D</button>
+              <button type="button" class="quiet small range active" data-days="7">7D</button>
+              <button type="button" class="quiet small range" data-days="30">30D</button>
+              <button type="button" class="quiet small range" data-days="365">1Y</button>
+            </div>
+            <p class="muted" id="chart-status"></p>
+          </div>
+          <svg class="chart" id="chart" role="img" aria-label="Price chart"></svg>
         </div>
       </section>
 
@@ -150,6 +164,8 @@
     <button type="button" class="quiet danger" id="start-over">Start over</button>
   </footer>
 
+  <script src="js/charts.js"></script>
+  <script src="js/live.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -21,6 +21,10 @@ let lastPriceAt = null;
 let mood = null;   // { value, label } from the Fear & Greed index
 let news = [];     // [{ title, url, source, publishedAt }] for the selected coin
 let newsFor = null; // which coin id the news is for
+let tape = [];     // the top 10 coins by market cap, with 7-day sparklines
+let liveAt = null; // when the last live tick arrived
+let chart = { days: 7, points: [], forId: null }; // the price chart on screen
+const chartCache = {}; // "bitcoin:7" -> { points, at }
 
 // ---------- Save and load ----------
 
@@ -137,6 +141,10 @@ const els = {
   newsList: $("news-list"),
   headlineScore: $("headline-score"),
   headlineLabel: $("headline-label"),
+  tape: $("tape"),
+  chart: $("chart"),
+  chartStatus: $("chart-status"),
+  ranges: document.querySelectorAll(".range"),
 };
 
 function show(el, on) {
@@ -194,6 +202,105 @@ async function fetchPrices() {
   }
 }
 
+// The top 10 coins by market cap, with their last 7 days, for the tape.
+async function fetchTape() {
+  try {
+    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=24h,7d`);
+    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+    const data = await response.json();
+    tape = data.map((c) => ({
+      id: c.id,
+      name: c.name,
+      symbol: c.symbol.toUpperCase(),
+      spark: c.sparkline_in_7d ? c.sparkline_in_7d.price : [],
+    }));
+    for (const c of data) {
+      const known = prices[c.id];
+      prices[c.id] = {
+        // A live tick is fresher than this poll, so keep it.
+        price: known && liveHas(c.symbol) ? known.price : c.current_price,
+        change24h: c.price_change_percentage_24h_in_currency,
+        change7d: c.price_change_percentage_7d_in_currency,
+      };
+    }
+    renderTape();
+    watchLive();
+  } catch (err) {
+    if (tape.length === 0) {
+      els.tape.replaceChildren(el("li", "Could not load the top coins.", "muted"));
+    }
+  }
+}
+
+// Price history for the chart. Cached for five minutes per coin and range.
+async function fetchChart() {
+  if (!state.selected) return;
+  const id = state.selected;
+  const key = `${id}:${chart.days}`;
+  const cached = chartCache[key];
+  if (cached && Date.now() - cached.at < 5 * 60 * 1000) {
+    chart = { days: chart.days, points: cached.points, forId: id };
+    renderChart();
+    return;
+  }
+  els.chartStatus.textContent = "Loading…";
+  try {
+    const response = await fetch(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`);
+    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
+    const data = await response.json();
+    chartCache[key] = { points: data.prices, at: Date.now() };
+    if (state.selected !== id) return; // the user moved on while this loaded
+    chart = { days: chart.days, points: data.prices, forId: id };
+    els.chartStatus.textContent = "";
+    renderChart();
+  } catch (err) {
+    els.chartStatus.textContent = "Chart is not available right now.";
+  }
+}
+
+// Every coin on screen, by symbol, so a live tick can find it.
+function coinsBySymbol() {
+  const map = {};
+  for (const c of tape) map[c.symbol] = c.id;
+  for (const p of state.positions) map[p.symbol] = p.id;
+  if (selectedCoin) map[selectedCoin.symbol] = selectedCoin.id;
+  return map;
+}
+
+function watchLive() {
+  liveWatch(Object.keys(coinsBySymbol()));
+}
+
+// A live tick from Coinbase. Updates the price in memory, then redraws the
+// parts that show it, at most five times a second.
+let tickTimer = null;
+function applyTick(symbol, price) {
+  const id = coinsBySymbol()[symbol];
+  if (!id || !prices[id]) return;
+  const before = prices[id].price;
+  prices[id].price = price;
+  prices[id].liveBefore = before;
+  liveAt = new Date();
+  if (tickTimer) return;
+  tickTimer = setTimeout(() => {
+    tickTimer = null;
+    const sel = prices[state.selected];
+    const was = sel ? sel.liveBefore : null;
+    renderCoin();
+    renderPortfolio();
+    renderTape();
+    renderChart();
+    checkOrders();
+    if (sel && was != null && was !== sel.price) flashPrice(was);
+    if (sel) sel.liveBefore = sel.price;
+  }, 200);
+}
+
+function liveStatusChanged() {
+  renderCoin();
+  renderTape();
+}
+
 async function searchCoins(query) {
   els.searchBtn.disabled = true;
   els.results.innerHTML = "";
@@ -241,6 +348,8 @@ function selectCoin(coin) {
   render();
   fetchPrices();
   fetchNews();
+  fetchChart();
+  watchLive();
 }
 
 // ---------- Mood: the Crypto Fear & Greed Index ----------
@@ -331,6 +440,10 @@ function headlineMood() {
 }
 
 // ---------- Trading ----------
+
+function checkOrders() {
+  // Pending orders are checked here on every price update.
+}
 
 function readAmount(input, msgEl) {
   const raw = input.value.trim();
@@ -464,7 +577,71 @@ function renderCoin() {
   els.coinSymbol.textContent = selectedCoin.symbol;
   els.coinPrice.textContent = fmtMoney(p.price);
   els.coinChange.textContent = `24h ${fmtPct(p.change24h)} · 7d ${fmtPct(p.change7d)}`;
-  els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)}`;
+  renderUpdated();
+}
+
+// "Live · Coinbase" with a green dot when ticks are coming in for this coin,
+// otherwise when CoinGecko last answered.
+function renderUpdated() {
+  if (!selectedCoin || !prices[state.selected]) return;
+  els.coinUpdated.replaceChildren();
+  if (liveHas(selectedCoin.symbol) && liveAt && Date.now() - liveAt.getTime() < 90 * 1000) {
+    els.coinUpdated.appendChild(el("span", "", "live-dot"));
+    els.coinUpdated.appendChild(document.createTextNode(`Live · Coinbase · ${timeAgo(liveAt)}`));
+  } else {
+    els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)} · CoinGecko`;
+  }
+}
+
+function renderTape() {
+  if (tape.length === 0) return;
+  els.tape.replaceChildren();
+  for (const c of tape) {
+    const q = prices[c.id];
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tape-item" + (c.id === state.selected ? " active" : "");
+    btn.dataset.id = c.id;
+    btn.dataset.name = c.name;
+    btn.dataset.symbol = c.symbol;
+    btn.title = c.name;
+    btn.appendChild(el("span", c.symbol, "sym"));
+    btn.appendChild(el("span", q ? fmtMoney(q.price) : "—", "fig"));
+    btn.appendChild(el("span", q ? fmtPct(q.change24h) : "", "fig " + (q ? upDown(q.change24h) : "")));
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("aria-hidden", "true");
+    btn.appendChild(svg);
+    drawSparkline(svg, c.spark);
+    li.appendChild(btn);
+    els.tape.appendChild(li);
+  }
+}
+
+function renderChart() {
+  if (!state.selected || chart.forId !== state.selected || chart.points.length < 2) {
+    if (state.selected && chart.forId !== state.selected) els.chart.replaceChildren();
+    return;
+  }
+  const points = chart.points.slice();
+  const q = prices[state.selected];
+  if (q) points.push([Date.now(), q.price]); // the live price is the last point
+  const markers = state.trades
+    .filter((t) => t.coinId === state.selected)
+    .map((t) => ({ t: new Date(t.time).getTime(), price: t.price, side: t.side }));
+  const days = chart.days;
+  const fmtTime = (t) => {
+    const d = new Date(t);
+    if (days <= 1) return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    if (days <= 30) return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  };
+  drawLineChart(els.chart, points, {
+    markers,
+    fmt: (v) => fmtMoney(v),
+    fmtTime,
+    fmtHover: (t) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+  });
 }
 
 function renderTrade() {
@@ -601,6 +778,8 @@ function render() {
   renderMood();
   renderNews();
   renderRules();
+  renderTape();
+  renderChart();
 }
 
 // ---------- Events ----------
@@ -622,6 +801,20 @@ els.results.addEventListener("click", (e) => {
 });
 
 els.coinRetry.addEventListener("click", fetchPrices);
+
+els.tape.addEventListener("click", (e) => {
+  const btn = e.target.closest(".tape-item");
+  if (!btn) return;
+  selectCoin({ id: btn.dataset.id, name: btn.dataset.name, symbol: btn.dataset.symbol });
+});
+
+for (const btn of els.ranges) {
+  btn.addEventListener("click", () => {
+    chart.days = Number(btn.dataset.days);
+    for (const b of els.ranges) b.classList.toggle("active", b === btn);
+    fetchChart();
+  });
+}
 
 els.buyForm.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -709,11 +902,11 @@ els.newsRetry.addEventListener("click", fetchNews);
 load();
 render();
 fetchPrices();
+fetchTape();
 fetchMood();
 fetchNews();
+fetchChart();
+watchLive();
 setInterval(fetchPrices, 60 * 1000);
-setInterval(() => {
-  if (lastPriceAt && state.selected && prices[state.selected]) {
-    els.coinUpdated.textContent = `Updated ${timeAgo(lastPriceAt)}`;
-  }
-}, 1000);
+setInterval(fetchTape, 60 * 1000);
+setInterval(renderUpdated, 1000);

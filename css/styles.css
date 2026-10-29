@@ -97,6 +97,85 @@ body {
 .up { color: var(--up); }
 .down { color: var(--down); }
 
+/* Tape: the top coins, one strip, scrolls sideways on a phone */
+
+.tape-wrap {
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tape {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0;
+  display: flex;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.tape-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  font-size: var(--small);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.tape-item:hover, .tape-item:focus-visible { border-color: var(--edge); }
+.tape-item.active { border-color: var(--up); }
+.tape-item .sym { font-weight: 700; }
+.tape-item svg { width: 60px; height: 20px; }
+.spark { fill: none; stroke-width: 1.5; }
+
+/* Chart */
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.ranges { display: flex; gap: 4px; }
+.range.active { border-color: var(--up); color: var(--up); }
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+  touch-action: none;
+}
+
+.chart .grid { stroke: var(--hairline); stroke-width: 1; }
+.chart .axis { fill: var(--text-muted); font-size: 11px; font-family: var(--font-figures); }
+.chart .line { fill: none; stroke-width: 2; }
+.chart .area { opacity: 0.12; }
+.chart .mark { stroke: var(--bg); stroke-width: 1.5; }
+.chart .mark.buy { fill: var(--up); }
+.chart .mark.sell { fill: var(--down); }
+.chart .cross { stroke: var(--edge); stroke-width: 1; }
+.chart .cross-dot { stroke: var(--bg); stroke-width: 1.5; }
+.chart .readout { fill: var(--text); font-size: 12px; font-family: var(--font-figures); font-weight: 700; }
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--up);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 /* Layout */
 
 .layout {
