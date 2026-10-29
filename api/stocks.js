@@ -112,6 +112,42 @@ async function news(symbol, key) {
       image: /^https:\/\//.test(a.image || "") ? a.image : null,
       publishedAt: new Date(a.datetime * 1000).toISOString(),
     }));
+  // Finnhub often sends the publisher's logo as the image. When the same
+  // image repeats, open each article and read its own preview picture.
+  const counts = {};
+  for (const a of articles) if (a.image) counts[a.image] = (counts[a.image] || 0) + 1;
+  await Promise.all(articles.map(async (a) => {
+    if (a.image && counts[a.image] === 1) return;
+    const og = await previewImage(a.url);
+    if (og) a.image = og;
+  }));
+
   const brief = articles.length ? await readHeadlines(`the stock ${s}`, articles.map((a) => a.title)) : null;
   return json({ articles, brief, briefError: brief ? undefined : "unavailable" }, 200, cacheFor(brief, articles));
+}
+
+// The og:image of a page: the picture a link to it shows in a chat. Reads
+// only the first 120 KB and gives up after three seconds.
+async function previewImage(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(3000), headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperTrader/1.0)" }, redirect: "follow" });
+    if (!r.ok) return null;
+    const reader = r.body.getReader();
+    let html = "", got = 0;
+    const decoder = new TextDecoder();
+    while (got < 120000) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      got += value.length;
+      if (/<\/head>/i.test(html)) break;
+    }
+    reader.cancel().catch(() => {});
+    const m = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+    const img = m && m[1];
+    return img && /^https:\/\//.test(img) ? img : null;
+  } catch {
+    return null;
+  }
 }
