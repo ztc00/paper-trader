@@ -2,8 +2,9 @@
 // a handful of calls a minute per address, so the page used to get 429s on
 // its own. Here every visitor shares one cached answer per URL, and a free
 // Demo key (COINGECKO_API_KEY in Vercel, never in the repo) raises the
-// limit. Without the key the function answers 503 and the page calls
-// CoinGecko directly, as it did before.
+// limit. Without the key the function still proxies and caches, so one
+// visitor's address is never the one being counted; if CoinGecko throttles
+// the function, the page falls back to a direct call for that request.
 //   /api/crypto?op=tape                 top 10 with 7-day sparklines
 //   /api/crypto?op=top                  top 50 with 7-day sparklines
 //   /api/crypto?op=prices&ids=a,b       prices, changes and sparklines for ids
@@ -19,7 +20,8 @@ function json(body, status, cache) {
 }
 
 async function gecko(path, key) {
-  const r = await fetch(`${BASE}${path}`, { headers: { "x-cg-demo-api-key": key }, signal: AbortSignal.timeout(8000) });
+  const headers = key ? { "x-cg-demo-api-key": key } : {};
+  const r = await fetch(`${BASE}${path}`, { headers, signal: AbortSignal.timeout(8000) });
   if (r.status === 429) return { status: 429 };
   if (!r.ok) return { status: r.status };
   return { status: 200, data: await r.json() };
@@ -27,8 +29,7 @@ async function gecko(path, key) {
 
 export default {
   async fetch(request) {
-    const key = process.env.COINGECKO_API_KEY;
-    if (!key) return json({ error: "Crypto data is not set up yet." }, 503);
+    const key = process.env.COINGECKO_API_KEY || "";
     const url = new URL(request.url);
     const op = url.searchParams.get("op");
     let path, cache;

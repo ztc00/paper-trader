@@ -359,12 +359,12 @@ async function geckoGet(op, params, directPath) {
         cryptoFunction = false; // fall through to a direct call
       } else {
         const data = await r.json();
-        if (r.status === 429) throw new Error("CoinGecko is rate-limiting right now. Try again in a minute.");
-        if (!r.ok) throw new Error(data.error || `CoinGecko answered ${r.status}`);
-        return data;
+        if (r.ok) return data;
+        if (r.status !== 429) throw new Error(data.error || `CoinGecko answered ${r.status}`);
+        // The function was throttled: try once directly, below.
       }
     } catch (err) {
-      if (/rate-limiting|answered/.test(err.message)) throw err;
+      if (/answered/.test(err.message)) throw err;
       cryptoFunction = false;
     }
   }
