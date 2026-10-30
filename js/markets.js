@@ -143,9 +143,7 @@ function renderWatch() {
 
 async function fetchCoins() {
   try {
-    const r = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=true&price_change_percentage=24h,7d`);
-    if (!r.ok) throw new Error(r.status === 429 ? "CoinGecko is rate-limiting right now. Try again in a minute." : `CoinGecko answered ${r.status}`);
-    coins = await r.json();
+    coins = await geckoGet("top", {}, "/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=true&price_change_percentage=24h,7d");
     for (const c of coins) {
       prices[c.id] = { price: c.current_price, change24h: c.price_change_percentage_24h_in_currency, change7d: c.price_change_percentage_7d_in_currency, spark: c.sparkline_in_7d ? c.sparkline_in_7d.price : [] };
     }
@@ -216,6 +214,6 @@ load();
 renderHeader();
 fetchQuotes([...new Set(state.positions.map((p) => p.id))]).then(renderHeader);
 refresh();
-setInterval(refresh, 60 * 1000);
+setInterval(refresh, 3 * 60 * 1000);
 setInterval(() => { if (lastAt) els.updated.textContent = `Updated ${timeAgo(lastAt)}`; }, 1000);
 document.addEventListener("state-changed", () => { renderHeader(); renderWatch(); renderCoins(); renderStocks(); });

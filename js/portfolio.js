@@ -228,7 +228,7 @@ els.positionsBody.addEventListener("click", (e) => {
 load();
 render();
 refresh();
-setInterval(refresh, 60 * 1000);
+setInterval(refresh, 2 * 60 * 1000);
 setInterval(refreshStocks, 15 * 1000);
 setInterval(() => {
   if (!lastAt || els.updated.classList.contains("error")) return;

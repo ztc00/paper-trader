@@ -341,6 +341,39 @@ function toast(message, cls) {
   setTimeout(() => t.remove(), 4000);
 }
 
+// ---------- CoinGecko, through the function when it is set up ----------
+
+// CoinGecko allows only a few calls a minute per address. /api/crypto
+// caches every answer for all visitors and carries a key. If the function
+// is not set up (503) or not there (a local server), the page calls
+// CoinGecko directly, once, and remembers that for the session.
+let cryptoFunction = true;
+
+async function geckoGet(op, params, directPath) {
+  if (cryptoFunction) {
+    try {
+      const qs = new URLSearchParams({ op, ...params }).toString();
+      const r = await fetch(`/api/crypto?${qs}`);
+      const type = r.headers.get("content-type") || "";
+      if (r.status === 503 || r.status === 404 || !type.includes("json")) {
+        cryptoFunction = false; // fall through to a direct call
+      } else {
+        const data = await r.json();
+        if (r.status === 429) throw new Error("CoinGecko is rate-limiting right now. Try again in a minute.");
+        if (!r.ok) throw new Error(data.error || `CoinGecko answered ${r.status}`);
+        return data;
+      }
+    } catch (err) {
+      if (/rate-limiting|answered/.test(err.message)) throw err;
+      cryptoFunction = false;
+    }
+  }
+  const r = await fetch(`${COINGECKO}${directPath}`);
+  if (r.status === 429) throw new Error("CoinGecko is rate-limiting right now. Try again in a minute.");
+  if (!r.ok) throw new Error(`CoinGecko answered ${r.status}`);
+  return r.json();
+}
+
 // ---------- Prices for any list of ids (the pages other than the desk) ----------
 
 async function fetchQuotes(ids) {
@@ -348,11 +381,11 @@ async function fetchQuotes(ids) {
   const stocks = ids.filter(isStock).map(stockSymbol).sort();
   const jobs = [];
   if (coins.length) {
-    jobs.push(fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${coins.join(",")}&price_change_percentage=24h,7d`)
-      .then((r) => { if (!r.ok) throw new Error(`CoinGecko answered ${r.status}`); return r.json(); })
+    const sorted = coins.slice().sort();
+    jobs.push(geckoGet("prices", { ids: sorted.join(",") }, `/coins/markets?vs_currency=usd&ids=${sorted.join(",")}&sparkline=true&price_change_percentage=24h,7d`)
       .then((data) => {
         for (const c of data) {
-          prices[c.id] = { price: c.current_price, change24h: c.price_change_percentage_24h_in_currency, change7d: c.price_change_percentage_7d_in_currency };
+          prices[c.id] = { price: c.current_price, change24h: c.price_change_percentage_24h_in_currency, change7d: c.price_change_percentage_7d_in_currency, spark: c.sparkline_in_7d ? c.sparkline_in_7d.price : [] };
         }
       }));
   }

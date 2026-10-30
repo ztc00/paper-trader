@@ -55,7 +55,11 @@ its own sentiment, shown beside mine so the two can be compared.
 
 ## The APIs
 
-- **CoinGecko** (free, no key): https://docs.coingecko.com/reference/coins-markets
+- **CoinGecko** (free; a free Demo key raises the limit): https://docs.coingecko.com/reference/coins-markets
+  - Through `api/crypto.js`, which caches every answer for all visitors, when
+    `COINGECKO_API_KEY` is set in Vercel. Without it the page calls CoinGecko
+    directly and shares its few calls a minute with everything else on your
+    address.
   - `GET /api/v3/search?query=sol` to find a coin by name.
   - `GET /api/v3/coins/markets?vs_currency=usd&ids=bitcoin,solana&price_change_percentage=24h,7d`
     for the price, 24h and 7d change of the selected coin and every coin I

@@ -141,14 +141,6 @@ function fetchPrices() {
   fetchStockPrices();
 }
 
-// CoinGecko's free tier allows about 30 calls a minute from one address.
-// A 429 means wait, not that the connection is down.
-function geckoError(response) {
-  return new Error(response.status === 429
-    ? "CoinGecko is rate-limiting right now. Try again in a minute."
-    : `CoinGecko answered ${response.status}`);
-}
-
 function geckoMessage(err) {
   return /rate-limiting/.test(err.message) ? err.message : "Could not reach CoinGecko. Check your connection and retry.";
 }
@@ -180,9 +172,8 @@ async function fetchCryptoPrices() {
   const firstTime = selectedHere && !prices[state.selected];
   if (firstTime) setCoinView("loading");
   try {
-    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${ids.join(",")}&sparkline=true&price_change_percentage=24h,7d`);
-    if (!response.ok) throw geckoError(response);
-    const data = await response.json();
+    const sorted = ids.slice().sort();
+    const data = await geckoGet("prices", { ids: sorted.join(",") }, `/coins/markets?vs_currency=usd&ids=${sorted.join(",")}&sparkline=true&price_change_percentage=24h,7d`);
     const before = selectedHere && prices[state.selected] ? prices[state.selected].price : null;
     for (const c of data) {
       const known = prices[c.id];
@@ -235,9 +226,7 @@ async function fetchTape() {
     return;
   }
   try {
-    const response = await fetch(`${COINGECKO}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=24h,7d`);
-    if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`);
-    const data = await response.json();
+    const data = await geckoGet("tape", {}, "/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=24h,7d");
     tape = data.map((c) => ({
       id: c.id,
       name: c.name,
@@ -257,7 +246,8 @@ async function fetchTape() {
     watchLive();
   } catch (err) {
     if (tape.length === 0) {
-      els.tape.replaceChildren(el("li", "Could not load the tape.", "muted"));
+      els.tape.replaceChildren(el("li", /rate-limiting/.test(err.message) ? err.message : "Could not load the tape.", "muted"));
+      setTimeout(fetchTape, 45 * 1000); // try again on its own
     }
   }
 }
@@ -268,7 +258,7 @@ async function fetchChart() {
   const id = state.selected;
   const key = `${id}:${chart.days}`;
   const cached = chartCache[key];
-  if (cached && Date.now() - cached.at < 5 * 60 * 1000) {
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
     chart = { days: chart.days, points: cached.points, forId: id };
     chartView = { from: 0, to: 1 };
     renderChart();
@@ -283,9 +273,7 @@ async function fetchChart() {
       if (!response.ok) throw new Error(data.error || `The stocks function answered ${response.status}`);
       points = data.points;
     } else {
-      const response = await fetch(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`);
-      if (!response.ok) throw geckoError(response);
-      points = (await response.json()).prices;
+      points = (await geckoGet("chart", { id, days: chart.days }, `/coins/${id}/market_chart?vs_currency=usd&days=${chart.days}`)).prices;
     }
     chartCache[key] = { points, at: Date.now() };
     if (state.selected !== id) return; // the user moved on while this loaded
@@ -359,9 +347,7 @@ async function searchCoins(query) {
       matches = data.matches.map((m) => ({ id: `stock:${m.symbol}`, name: m.name, symbol: m.symbol, meta: m.type }));
       els.searchMsg.textContent = matches.length ? "" : "No US stock or ETF called that. Try the ticker.";
     } else {
-      const response = await fetch(`${COINGECKO}/search?query=${encodeURIComponent(query)}`);
-      if (!response.ok) throw geckoError(response);
-      const data = await response.json();
+      const data = await geckoGet("search", { q: query }, `/search?query=${encodeURIComponent(query)}`);
       matches = data.coins.slice(0, 5).map((c) => ({
         id: c.id, name: c.name, symbol: c.symbol.toUpperCase(),
         meta: Number.isInteger(c.market_cap_rank) ? `#${c.market_cap_rank}` : "",
@@ -1577,13 +1563,16 @@ load();
 for (const b of els.marketBtns) b.classList.toggle("active", b.dataset.market === state.market);
 els.searchInput.placeholder = state.market === "stocks" ? "apple, NVDA, spy" : "bitcoin, eth, sol";
 render();
+// CoinGecko calls are spread out on load and polled slowly: the live prices
+// come from Coinbase; CoinGecko only brings the 24h/7d changes, sparklines
+// and the chart.
 fetchPrices();
-fetchTape();
+setTimeout(fetchTape, 900);
+setTimeout(fetchChart, 1800);
 fetchMood();
 fetchNews();
-fetchChart();
 watchLive();
-setInterval(fetchCryptoPrices, 60 * 1000);
+setInterval(fetchCryptoPrices, 3 * 60 * 1000);
 setInterval(fetchStockPrices, 15 * 1000);
-setInterval(fetchTape, 60 * 1000);
+setInterval(fetchTape, 3 * 60 * 1000);
 setInterval(renderUpdated, 1000);

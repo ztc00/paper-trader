@@ -232,6 +232,14 @@ confirmation, no order history, no watchlist, no one-click close. Version 4:
     means a shorter range first. The live-price tag shows only while the
     end of the range is in view.
 
+45. **CoinGecko through a function.** Its public API allows a few calls a
+    minute per address, and the desk was tripping that on its own.
+    `api/crypto.js` carries a free Demo key and caches each answer (tape and
+    top 50 two minutes, prices one, charts five, search an hour) for every
+    visitor. Without the key the page falls back to direct calls. Loads are
+    staggered and CoinGecko is polled every three minutes, since the live
+    prices come from Coinbase.
+
 States for the new parts:
 
 - **Live:** "Live · Coinbase · 0s ago" with a green dot when ticks arrive;

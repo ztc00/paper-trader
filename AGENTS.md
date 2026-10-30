@@ -3,12 +3,14 @@
 - Plain HTML, CSS and JavaScript. No frameworks, no libraries, no build step,
   no npm, nothing loaded from a CDN. Use the simplest code that works, and add
   nothing I did not ask for.
-- The page calls CoinGecko, alternative.me and Coinbase's public ticker feed
-  directly from the browser. Every keyed API is called only from `api/`:
-  `news.js` (GNews, OpenRouter) and `stocks.js` (Finnhub, Twelve Data,
-  OpenRouter), with the model call shared in `_read.js`. Keys come from
-  `process.env` only. No key goes in any file in this repo, and everything
-  else stays static.
+- The page calls alternative.me and Coinbase's public ticker feed directly
+  from the browser. CoinGecko goes through `api/crypto.js` when a
+  `COINGECKO_API_KEY` is set (cached for every visitor), and directly
+  otherwise. Every other keyed API is called only from `api/`: `news.js`
+  (GNews, OpenRouter) and `stocks.js` (Finnhub, Twelve Data, OpenRouter),
+  with the model call shared in `_read.js`. Keys come from `process.env`
+  only. No key goes in any file in this repo, and everything else stays
+  static.
 - Every `fetch` sits inside `try/catch` and checks `response.ok`. Every
   section that fetches has an empty, loading, error and in-use state, as
   PRD.md describes. No mock or made-up data when a request fails: show the
@@ -18,7 +20,8 @@
   with `js/trades.js`, and shared by all of them `js/shared.js` (state,
   formatting, helpers, quotes, theme, nav), `js/charts.js` (SVG charts),
   `js/live.js` (the Coinbase ticker feed, desk only), `css/styles.css`,
-  `api/news.js`, `api/stocks.js`, `api/_read.js`. Styles follow DESIGN.md. If you need a color, font
+  `api/news.js`, `api/stocks.js`, `api/crypto.js`, `api/_read.js`. Styles
+  follow DESIGN.md. If you need a color, font
   or size that is not in it, stop and tell me.
 - All saved data lives in the `state` object in `js/shared.js`. Only the
   desk changes it; the other pages read it. Every change goes through a
