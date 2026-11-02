@@ -161,18 +161,30 @@ DESIGN.md was committed (`c2d2517`) before any CSS was written.
 
 I expected to need one price request per coin I hold. CoinGecko's
 `coins/markets` endpoint takes a list of ids, so the selected coin and every
-position come back in one request, and the refresh timer makes one call a
-minute no matter how many coins I own.
+position come back in one request. I also expected the page to poll for every
+price. Most crypto prices now arrive over Coinbase's ticker feed instead, and
+the poll is a backup every three minutes through `api/crypto.js`.
 
 ## The required question
 
 **Pick one piece of AI output I did not accept as-is. What did it give me,
 what did I change, and how did I know it needed changing? Point at the commit.**
 
-[Zayd: write this after your review, about the commit where you changed
-something the agent built. Say what it gave you, what you changed, and how you
-knew. One candidate from the build: the first search results (commit
-`588aee3`) put the coin names from CoinGecko into the page with `innerHTML`,
-which would run anything the API sent. That was changed to `textContent` in
-commit `51a6feb` after a review of the commit, before the news headlines, which
-are the same kind of outside text, were added.]
+Two, because they were the two times I sent the agent back.
+
+**The news pictures.** Commit `2a09287` says "News with pictures". I opened the
+live page, picked a stock, and the news list had no pictures at all, just the
+headlines. I knew it was the code and not loading because I waited, reloaded,
+and tried a few other stocks and it was the same every time. It turned out
+Finnhub's `image` field is the publisher's logo for every article, and the
+filter the agent added to drop repeated logos dropped all of them. The fix is
+in `e8f42ff` and `c3bea9c`: the function now opens each article and reads its
+own `og:image` tag, over https only, with the host checked, so a bad link
+cannot point the function at something inside Vercel.
+
+**Crypto only.** The first working version (`4c446b8`) was crypto only, which
+is what the proposal said. When I used it I realised I mostly trade stocks, so
+a paper trading tool that cannot hold AAPL does not test my actual rules. I had
+stocks added in `6eaa7bc`: a Crypto / Stocks toggle, Finnhub for search and
+quotes, Twelve Data for the chart. The agent did what the proposal asked. The
+proposal was the part that was wrong, and I only saw that by using the tool.
